@@ -522,8 +522,18 @@ Environment.Library = Library
 for _, path in ipairs(addonPaths) do
     local fileName = path:match("[^\\/]+$") or path
     local ok, loadError = pcall(function()
-        local source = readfile(path)
-        assert(type(source) == "string", "readfile returned no source")
+        local source
+        if fileName == "nosbloodhook.lua" then
+            -- The suite owns this corrected build instead of depending on a
+            -- potentially outdated local FartHub copy.
+            source = game:HttpGet(
+                "https://raw.githubusercontent.com/Au0yyyx/Community/main/nosbloodhook.lua?t="
+                    .. tostring(os.time())
+            )
+        else
+            source = readfile(path)
+        end
+        assert(type(source) == "string", "addon source was unavailable")
         source = source:gsub(
             "local Library = findFartHubLibrary%(30%)",
             "local Library = (getgenv and getgenv() or _G).Library"
