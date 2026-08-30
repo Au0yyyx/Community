@@ -413,6 +413,7 @@ end
 function returnDrops()
     local head = getHead()
     if not head then return end
+    local changed = false
     for dropped, data in pairs(Bank.Drops) do
         if dropped.Parent then
             for obj, values in pairs(data.Saved or {}) do
@@ -433,24 +434,21 @@ function returnDrops()
                 dropPart.CanCollide = false
                 dropPart.CFrame = head.CFrame
                 
-                if type(firetouchinterest) == "function" then
-                    firetouchinterest(head, dropPart, 0)
-                    firetouchinterest(head, dropPart, 1)
-                end
-                -- BedWars does not collect item drops through touch alone; its
-                -- controller explicitly calls PickupItemDrop.
+                -- Remove it from tracking BEFORE requesting pickup. Previously
+                -- this ran every Heartbeat until an async callback completed,
+                -- creating repeated pickup calls and duplicate body visuals.
+                Bank.Drops[dropped] = nil
+                changed = true
                 pcall(function()
-                    local promise=PickupRemote:CallServerAsync({itemDrop=dropped})
-                    if promise and promise.andThen then
-                        promise:andThen(function(ok)
-                            if ok then Bank.Drops[dropped]=nil; updateHud() end
-                        end)
-                    end
+                    PickupRemote:CallServerAsync({itemDrop=dropped})
                 end)
             end
+        else
+            Bank.Drops[dropped] = nil
+            changed = true
         end
     end
-    cleanDrops()
+    if changed then updateHud() end
 end
 
 local el, tel = 0, 0
