@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
+local Actors = require(ReplicatedStorage.Modules.Gameplay.Actors)
 local Env = getgenv and getgenv() or _G
 local KEY = "__ForsakenStaminaTrackerV2"
 
@@ -70,6 +71,9 @@ local function statsFor(model, actorType)
                 Gain = tonumber(config.StaminaGain) or defaults.Gain,
                 Walk = tonumber(config.Speed) or defaults.Walk,
                 Sprint = tonumber(config.SprintSpeed) or defaults.Sprint,
+                EnragedCap = tonumber(config.EnragedStaminaCap),
+                EnragedCapTime = tonumber(config.EnragedStaminaCapLerpTime),
+                EnragedSpeed = tonumber(config.EnragedSpeed),
             }
         end
     end
@@ -138,9 +142,16 @@ local function newTracker(model, actorType)
         Model = model, Type = actorType, Name = actorName(model), Stats = stats,
         Estimate = stats.Max, ExhaustUntil = 0, LastPosition = root and root.Position,
         SmoothedSpeed = 0, DrainAllowed = actorType ~= "Killer",
+        Enraged = false, EnragedSince = 0,
         NearestDistance = math.huge, PathDistance = math.huge, LastGateScan = 0,
         Gui = gui, Fill = fill, Label = label, Detail = detail,
     }
+end
+
+local function actorStateFor(model)
+    for _, actor in pairs(Actors.CurrentActors) do
+        if actor.Rig == model then return actor.State end
+    end
 end
 
 local function destroyTracker(tracker)
@@ -227,20 +238,34 @@ connect(RunService.Heartbeat, function(dt)
             end
             t.LastPosition = position
             t.SmoothedSpeed += (rawSpeed - t.SmoothedSpeed) * math.clamp(dt * 12, 0, 1)
+            local state = t.Type == "Killer" and actorStateFor(model)
+            local enraged = state and state.isEnraged == true and t.Stats.EnragedCap ~= nil
+            if enraged and not t.Enraged then t.EnragedSince = now end
+            t.Enraged = enraged
+            local staminaCap = t.Stats.Max
+            if enraged then
+                local alpha = math.clamp((now - t.EnragedSince) / math.max(t.Stats.EnragedCapTime or 6.5, 0.01), 0, 1)
+                staminaCap = t.Stats.Max + (t.Stats.EnragedCap - t.Stats.Max) * alpha
+            end
             local threshold = (t.Stats.Walk + t.Stats.Sprint) * 0.5
-            local sprinting = t.SmoothedSpeed > threshold
+            -- Raging Pace disables sprinting. Its fixed EnragedSpeed must never
+            -- be mistaken for normal stamina drain.
+            local sprinting = not enraged and t.SmoothedSpeed > threshold
             if sprinting and t.DrainAllowed then
                 t.Estimate = math.max(0, t.Estimate - t.Stats.Loss * dt)
                 if t.Estimate <= 0.01 then t.ExhaustUntil = now + 2 end
             elseif now >= t.ExhaustUntil then
-                t.Estimate = math.min(t.Stats.Max, t.Estimate + t.Stats.Gain * dt)
+                t.Estimate = math.min(staminaCap, t.Estimate + t.Stats.Gain * dt)
             end
+            t.Estimate = math.min(t.Estimate, staminaCap)
             local ratio = math.clamp(t.Estimate / t.Stats.Max, 0, 1)
             t.Fill.Size = UDim2.fromScale(ratio, 1)
             t.Fill.BackgroundColor3 = Color3.fromHSV(ratio * 0.33, 0.78, 0.95)
             t.Label.Text = string.format("%s: %.1f / %.0f", t.Name, t.Estimate, t.Stats.Max)
             if t.Type == "Killer" then
-                t.Detail.Text = string.format("KILLER • %s • %.0f studs", t.DrainAllowed and "DRAIN" or "FREE", t.NearestDistance)
+                t.Detail.Text = enraged
+                    and string.format("KILLER • RAGING PACE • CAP %.0f", staminaCap)
+                    or string.format("KILLER • %s • %.0f studs", t.DrainAllowed and "DRAIN" or "FREE", t.NearestDistance)
             else
                 t.Detail.Text = string.format("SURVIVOR • %s • %.1f speed", sprinting and "DRAIN" or "REGEN", t.SmoothedSpeed)
             end
