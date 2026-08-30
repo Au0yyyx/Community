@@ -143,6 +143,8 @@ local function newTracker(model, actorType)
         Estimate = stats.Max, ExhaustUntil = 0, LastPosition = root and root.Position,
         SmoothedSpeed = 0, DrainAllowed = actorType ~= "Killer",
         Enraged = false, EnragedSince = 0,
+        WasSprinting = false, RecoveryDelay = 0,
+        LastAnimCheck = 0, SprintAnimation = false,
         NearestDistance = math.huge, PathDistance = math.huge, LastGateScan = 0,
         Gui = gui, Fill = fill, Label = label, Detail = detail,
     }
@@ -152,6 +154,36 @@ local function actorStateFor(model)
     for _, actor in pairs(Actors.CurrentActors) do
         if actor.Rig == model then return actor.State end
     end
+end
+
+local function sprintState(tracker, humanoid, actorState, now)
+    -- Animation-track enumeration is relatively expensive, so sample at 10 Hz.
+    if now - tracker.LastAnimCheck >= 0.1 then
+        tracker.LastAnimCheck = now
+        tracker.SprintAnimation = false
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                local name = string.lower(track.Name)
+                if track.WeightCurrent > 0.15
+                    and (name:find("sprint", 1, true) or name:find("run", 1, true)) then
+                    tracker.SprintAnimation = true
+                    break
+                end
+            end
+        end
+    end
+
+    if actorState and type(actorState.isSprinting) == "boolean" then
+        return actorState.isSprinting
+    end
+    local walkSpeed = humanoid and humanoid.WalkSpeed or 0
+    local fastWalkSpeed = walkSpeed > 20
+    local movementSaysSprint = tracker.SmoothedSpeed > (tracker.Stats.Walk + tracker.Stats.Sprint) * 0.5
+    -- Require actual movement. Animation/WalkSpeed confirms borderline cases;
+    -- displacement still catches games that implement sprint with multipliers.
+    return tracker.SmoothedSpeed > 1
+        and (movementSaysSprint or (fastWalkSpeed and tracker.SprintAnimation))
 end
 
 local function destroyTracker(tracker)
@@ -247,16 +279,27 @@ connect(RunService.Heartbeat, function(dt)
                 local alpha = math.clamp((now - t.EnragedSince) / math.max(t.Stats.EnragedCapTime or 6.5, 0.01), 0, 1)
                 staminaCap = t.Stats.Max + (t.Stats.EnragedCap - t.Stats.Max) * alpha
             end
-            local threshold = (t.Stats.Walk + t.Stats.Sprint) * 0.5
             -- Raging Pace disables sprinting. Its fixed EnragedSpeed must never
             -- be mistaken for normal stamina drain.
-            local sprinting = not enraged and t.SmoothedSpeed > threshold
+            local sprinting = not enraged and sprintState(t, humanoidOf(model), state, now)
             if sprinting and t.DrainAllowed then
                 t.Estimate = math.max(0, t.Estimate - t.Stats.Loss * dt)
-                if t.Estimate <= 0.01 then t.ExhaustUntil = now + 2 end
-            elseif now >= t.ExhaustUntil then
+                -- Mirrors Systems.Character.Game.Sprinting: the recovery wait
+                -- grows slowly while sprinting, from 0.2 up to 2 seconds.
+                t.RecoveryDelay = math.clamp(t.RecoveryDelay + dt * 0.05, 0.2, 2)
+                if t.Estimate <= 0.01 then t.RecoveryDelay = 2 end
+            else
+                if t.WasSprinting then
+                    t.RecoveryDelay = t.RecoveryDelay > 0.1
+                        and math.clamp(t.RecoveryDelay + 0.1, 0, 2) or 0.1
+                end
+                t.RecoveryDelay = math.max(0, t.RecoveryDelay - dt)
+            end
+            local staminaOverride = model:GetAttribute("AbilityStaminaOverride") == true
+            if not sprinting and t.RecoveryDelay <= 0 and not staminaOverride then
                 t.Estimate = math.min(staminaCap, t.Estimate + t.Stats.Gain * dt)
             end
+            t.WasSprinting = sprinting
             t.Estimate = math.min(t.Estimate, staminaCap)
             local ratio = math.clamp(t.Estimate / t.Stats.Max, 0, 1)
             t.Fill.Size = UDim2.fromScale(ratio, 1)
@@ -265,7 +308,8 @@ connect(RunService.Heartbeat, function(dt)
             if t.Type == "Killer" then
                 t.Detail.Text = enraged
                     and string.format("KILLER • RAGING PACE • CAP %.0f", staminaCap)
-                    or string.format("KILLER • %s • %.0f studs", t.DrainAllowed and "DRAIN" or "FREE", t.NearestDistance)
+                    or string.format("KILLER • %s • %.1fs", sprinting and "SPRINT" or
+                        (t.RecoveryDelay > 0 and "RECOVERY WAIT" or "REGEN"), t.RecoveryDelay)
             else
                 t.Detail.Text = string.format("SURVIVOR • %s • %.1f speed", sprinting and "DRAIN" or "REGEN", t.SmoothedSpeed)
             end
