@@ -480,7 +480,7 @@ local function setupRoleAwareStaminaTracker()
     Groupbox:AddToggle("ForsakenRoleAwareStamina", {
         Text = "Player stamina counters",
         Default = false,
-        Tooltip = "Survivor: killer stamina | Killer: survivor stamina | Spectator: both",
+        Tooltip = "State-aware: sprint animations, recovery delay, abilities and Raging Pace",
         Callback = function(enabled)
             unloadTracker()
             if not enabled then
@@ -497,7 +497,7 @@ local function setupRoleAwareStaminaTracker()
                 assert(type(Environment.__ForsakenStaminaTrackerV2) == "table", "tracker did not initialize")
             end)
             if ok then
-                trackerStatus:SetText("Status: Active (role-aware)")
+                trackerStatus:SetText("Status: Active (state-aware v3)")
             else
                 trackerStatus:SetText("Status: Failed")
                 warn("[Forsaken Suite] Stamina tracker failed:", loadError)
