@@ -274,6 +274,8 @@ end)
 -- ── Logic ────────────────────────────────────────────────────────────────────
 local function getHead()
     local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health <= 0 then return nil end
     return char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
 end
 
@@ -318,7 +320,21 @@ end
 local function depositResources()
     if not Bank.Enabled or Bank.Busy then return end
     local head = getHead()
-    if not head then return end
+    if not head then
+        for dropped,data in pairs(Bank.Drops) do
+            if dropped.Parent and data.Confirmed and not data.Returning then
+                moveTo(dropped,data.SkyPos)
+                local part=dropped:IsA("BasePart") and dropped or dropped:FindFirstChildWhichIsA("BasePart",true)
+                if part then
+                    part.Anchored=true
+                    part.AssemblyLinearVelocity=Vector3.zero
+                    part.AssemblyAngularVelocity=Vector3.zero
+                end
+            end
+        end
+        timerLabel.Text="BANK SECURED • SPECTATING"
+        return
+    end
     if isNear and isNear(head.Position) then return end
     Bank.Busy = true
 
@@ -412,7 +428,20 @@ end
 
 function returnDrops()
     local head = getHead()
-    if not head then return end
+    if not head then
+        -- Permanent death removes the character/physics owner. Continue
+        -- holding confirmed bank drops at their saved sky positions instead
+        -- of abandoning them to gravity.
+        for dropped,data in pairs(Bank.Drops) do
+            if dropped.Parent and data.Confirmed and not data.Returning then
+                moveTo(dropped,data.SkyPos)
+                local part=dropped:IsA("BasePart") and dropped or dropped:FindFirstChildWhichIsA("BasePart",true)
+                if part then part.Anchored=true; part.AssemblyLinearVelocity=Vector3.zero end
+            end
+        end
+        timerLabel.Text="BANK SECURED • SPECTATING"
+        return
+    end
     local changed = false
     for dropped, data in pairs(Bank.Drops) do
         if dropped.Parent then
@@ -483,7 +512,17 @@ Bank.Connections[#Bank.Connections+1] = RunService.Heartbeat:Connect(function(dt
     end
 
     local head = getHead()
-    if not head then return end
+    if not head then
+        for dropped,data in pairs(Bank.Drops) do
+            if dropped.Parent and data.Confirmed and not data.Returning then
+                moveTo(dropped,data.SkyPos)
+                local part=dropped:IsA("BasePart") and dropped or dropped:FindFirstChildWhichIsA("BasePart",true)
+                if part then part.Anchored=true; part.AssemblyLinearVelocity=Vector3.zero; part.AssemblyAngularVelocity=Vector3.zero end
+            end
+        end
+        timerLabel.Text="BANK SECURED • SPECTATING"
+        return
+    end
 
     if not Bank.Enabled or isNear(head.Position) then
         local now = tick()
