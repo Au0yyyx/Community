@@ -292,7 +292,7 @@ end
 local function updateHud()
     local realCounts = { iron = 0, diamond = 0, emerald = 0, gold = 0 }
     for dropped, data in pairs(Bank.Drops) do
-        if dropped.Parent and data.Confirmed then
+        if dropped.Parent and data.Confirmed and not data.Returning then
             local actual = tonumber(dropped:GetAttribute("Amount"))
                 or tonumber(dropped:GetAttribute("ItemAmount")) or data.Amount
             if actual~=actual or actual==math.huge or actual==-math.huge then actual=data.Amount end
@@ -430,18 +430,21 @@ function returnDrops()
             end
             local dropPart = dropped:IsA("BasePart") and dropped or dropped:FindFirstChildWhichIsA("BasePart", true)
             if dropPart then
+                if not data.Returning then changed = true end
+                data.Returning = true
                 dropPart.Anchored = false
                 dropPart.CanCollide = false
-                dropPart.CFrame = head.CFrame
-                
-                -- Remove it from tracking BEFORE requesting pickup. Previously
-                -- this ran every Heartbeat until an async callback completed,
-                -- creating repeated pickup calls and duplicate body visuals.
-                Bank.Drops[dropped] = nil
-                changed = true
-                pcall(function()
-                    PickupRemote:CallServerAsync({itemDrop=dropped})
-                end)
+                dropPart.AssemblyLinearVelocity = Vector3.zero
+                dropPart.AssemblyAngularVelocity = Vector3.zero
+                dropPart.CFrame = head.CFrame * CFrame.new(0, 2.5, 0)
+
+                -- Keep physically pinning it until the server removes it.
+                -- A bounded retry avoids both void loss and per-frame requests.
+                local now=tick()
+                if now >= (data.NextPickup or 0) then
+                    data.NextPickup=now+0.75
+                    pcall(function() PickupRemote:CallServerAsync({itemDrop=dropped}) end)
+                end
             end
         else
             Bank.Drops[dropped] = nil
@@ -492,7 +495,7 @@ Bank.Connections[#Bank.Connections+1] = RunService.Heartbeat:Connect(function(dt
     end
 
     for dropped, data in pairs(Bank.Drops) do
-        if dropped.Parent and data.Confirmed then
+        if dropped.Parent and data.Confirmed and not data.Returning then
             moveTo(dropped, data.SkyPos)
         end
     end
