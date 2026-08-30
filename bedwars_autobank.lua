@@ -143,7 +143,7 @@ frame.AnchorPoint = Vector2.new(0.5, 1)
 frame.Position    = UDim2.new(0.5, 0, 0.95, -20)
 frame.Size        = UDim2.fromOffset(200, 36)
 frame.BackgroundColor3 = Color3.fromRGB(20, 22, 27)
-frame.BackgroundTransparency = 0.22
+frame.BackgroundTransparency = 1
 frame.BorderSizePixel = 0
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 7)
 
@@ -157,6 +157,7 @@ timerLabel.TextSize    = 11
 timerLabel.TextColor3  = Color3.fromRGB(210, 220, 235)
 timerLabel.TextStrokeTransparency = 0.3
 timerLabel.Text        = "AUTOBANK RUNNING"
+timerLabel.Visible     = false
 
 local layout = Instance.new("UIListLayout", frame)
 layout.FillDirection       = Enum.FillDirection.Horizontal
@@ -170,7 +171,7 @@ for _, rn in ipairs({"emerald", "diamond", "iron", "gold"}) do
     s.Name = rn
     s.Size = UDim2.fromOffset(42, 30)
     s.BackgroundColor3 = Color3.fromRGB(55, 58, 66)
-    s.BackgroundTransparency = 0.15
+    s.BackgroundTransparency = 1
     s.BorderSizePixel = 0
     Instance.new("UICorner", s).CornerRadius = UDim.new(0, 4)
 
@@ -202,7 +203,7 @@ panel.Size = UDim2.fromOffset(210, 115)
 panel.BackgroundColor3 = Color3.fromRGB(18, 20, 25)
 panel.BackgroundTransparency = 0.08
 panel.BorderSizePixel = 0
-panel.Visible = true
+panel.Visible = false
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
 
 local ptt = Instance.new("TextLabel", panel)
@@ -266,9 +267,7 @@ delayBox.FocusLost:Connect(function()
 end)
 
 Bank.Connections[#Bank.Connections+1] = UIS.InputBegan:Connect(function(i, gpe)
-    if not gpe and i.KeyCode == Enum.KeyCode.RightShift then
-        panel.Visible = not panel.Visible
-    end
+    -- Settings panel intentionally hidden; only resource icons remain.
 end)
 
 -- ── Logic ────────────────────────────────────────────────────────────────────
