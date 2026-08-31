@@ -3,7 +3,6 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local PathfindingService = game:GetService("PathfindingService")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 local Actors = require(ReplicatedStorage.Modules.Gameplay.Actors)
@@ -144,7 +143,7 @@ local function newTracker(model, actorType)
         SmoothedSpeed = 0, DrainAllowed = actorType ~= "Killer",
         Enraged = false, EnragedSince = 0,
         WasSprinting = false, RecoveryDelay = 0,
-        LastAnimCheck = 0, SprintAnimation = false,
+        LastAnimCheck = 0, SprintAnimation = false, EnragedAnimation = false,
         NearestDistance = math.huge, PathDistance = math.huge, LastGateScan = 0,
         Gui = gui, Fill = fill, Label = label, Detail = detail,
     }
@@ -161,10 +160,14 @@ local function sprintState(tracker, humanoid, actorState, now)
     if now - tracker.LastAnimCheck >= 0.1 then
         tracker.LastAnimCheck = now
         tracker.SprintAnimation = false
+        tracker.EnragedAnimation = false
         local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
         if animator then
             for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                 local name = string.lower(track.Name)
+                if track.WeightCurrent > 0.15 and name:find("enraged", 1, true) then
+                    tracker.EnragedAnimation = true
+                end
                 if track.WeightCurrent > 0.15
                     and (name:find("sprint", 1, true) or name:find("run", 1, true)) then
                     tracker.SprintAnimation = true
@@ -174,29 +177,24 @@ local function sprintState(tracker, humanoid, actorState, now)
         end
     end
 
-    if actorState and type(actorState.isSprinting) == "boolean" then
-        return actorState.isSprinting
+    -- A replicated true is authoritative. A replicated false is not: remote
+    -- actor State tables often remain false even while their run replicates.
+    if actorState and actorState.isSprinting == true then
+        return true
     end
     local walkSpeed = humanoid and humanoid.WalkSpeed or 0
     local fastWalkSpeed = walkSpeed > 20
-    local movementSaysSprint = tracker.SmoothedSpeed > (tracker.Stats.Walk + tracker.Stats.Sprint) * 0.5
+    local movementSaysSprint = tracker.SmoothedSpeed > tracker.Stats.Walk
+        + math.max(3, (tracker.Stats.Sprint - tracker.Stats.Walk) * 0.28)
     -- Require actual movement. Animation/WalkSpeed confirms borderline cases;
     -- displacement still catches games that implement sprint with multipliers.
     return tracker.SmoothedSpeed > 1
-        and (movementSaysSprint or (fastWalkSpeed and tracker.SprintAnimation))
+        and (movementSaysSprint or (tracker.SprintAnimation and tracker.SmoothedSpeed > tracker.Stats.Walk * 1.08)
+            or (fastWalkSpeed and tracker.SprintAnimation))
 end
 
 local function destroyTracker(tracker)
     if tracker.Gui then tracker.Gui:Destroy() end
-end
-
-local function pathLength(from, to)
-    local path = PathfindingService:CreatePath({AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 8})
-    local ok = pcall(path.ComputeAsync, path, from, to)
-    if not ok or path.Status ~= Enum.PathStatus.Success then return math.huge end
-    local points, total = path:GetWaypoints(), 0
-    for i = 2, #points do total += (points[i].Position - points[i - 1].Position).Magnitude end
-    return total
 end
 
 local function livingModels(folder)
@@ -213,21 +211,18 @@ local function updateKillerGate(tracker, survivorModels, now)
     if now - tracker.LastGateScan < 0.45 then return end
     tracker.LastGateScan = now
     local killerRoot = rootOf(tracker.Model)
-    local nearest, nearestRoot = math.huge, nil
+    local nearest = math.huge
     for _, survivor in ipairs(survivorModels) do
         local root = rootOf(survivor)
         local d = root and (root.Position - killerRoot.Position).Magnitude or math.huge
-        if d < nearest then nearest, nearestRoot = d, root end
+        if d < nearest then nearest = d end
     end
     tracker.NearestDistance = nearest
-    if nearest <= 85 then
-        tracker.PathDistance, tracker.DrainAllowed = nearest, true
-    elseif nearestRoot and nearest <= 120 then
-        tracker.PathDistance = pathLength(killerRoot.Position, nearestRoot.Position)
-        tracker.DrainAllowed = tracker.PathDistance <= 100
-    else
-        tracker.PathDistance, tracker.DrainAllowed = math.huge, false
-    end
+    -- Forsaken's killer stamina gate is radial, not a navigable-path check.
+    -- The previous 85-stud/pathfinding approximation missed real drain from
+    -- survivors between 85 and 100 studs and caused most of the visible drift.
+    tracker.PathDistance = nearest
+    tracker.DrainAllowed = nearest <= 100
 end
 
 local function wantedTargets(role, killers, survivors)
@@ -271,7 +266,8 @@ connect(RunService.Heartbeat, function(dt)
             t.LastPosition = position
             t.SmoothedSpeed += (rawSpeed - t.SmoothedSpeed) * math.clamp(dt * 12, 0, 1)
             local state = t.Type == "Killer" and actorStateFor(model)
-            local enraged = state and state.isEnraged == true and t.Stats.EnragedCap ~= nil
+            local enraged = t.Stats.EnragedCap ~= nil
+                and ((state and state.isEnraged == true) or t.EnragedAnimation)
             if enraged and not t.Enraged then t.EnragedSince = now end
             t.Enraged = enraged
             local staminaCap = t.Stats.Max
@@ -282,7 +278,8 @@ connect(RunService.Heartbeat, function(dt)
             -- Raging Pace disables sprinting. Its fixed EnragedSpeed must never
             -- be mistaken for normal stamina drain.
             local sprinting = not enraged and sprintState(t, humanoidOf(model), state, now)
-            if sprinting and t.DrainAllowed then
+            local draining = sprinting and t.DrainAllowed
+            if draining then
                 t.Estimate = math.max(0, t.Estimate - t.Stats.Loss * dt)
                 -- Mirrors Systems.Character.Game.Sprinting: the recovery wait
                 -- grows slowly while sprinting, from 0.2 up to 2 seconds.
@@ -296,10 +293,10 @@ connect(RunService.Heartbeat, function(dt)
                 t.RecoveryDelay = math.max(0, t.RecoveryDelay - dt)
             end
             local staminaOverride = model:GetAttribute("AbilityStaminaOverride") == true
-            if not sprinting and t.RecoveryDelay <= 0 and not staminaOverride then
+            if not draining and t.RecoveryDelay <= 0 and not staminaOverride then
                 t.Estimate = math.min(staminaCap, t.Estimate + t.Stats.Gain * dt)
             end
-            t.WasSprinting = sprinting
+            t.WasSprinting = draining
             t.Estimate = math.min(t.Estimate, staminaCap)
             local ratio = math.clamp(t.Estimate / t.Stats.Max, 0, 1)
             t.Fill.Size = UDim2.fromScale(ratio, 1)
