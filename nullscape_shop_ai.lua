@@ -37,11 +37,11 @@ end
 local function difficulty()
  local v=RS:FindFirstChild("Difficulty");v=v and v.Value or 1
  if type(v)=="string"then return v end
- return ({[0]="Casual",[1]="Standard",[2]="Extreme"})[v]or"Standard"
+ return ({[0]="Casual",[1]="Standard",[2]="Extreme"})[v]or "Standard"
 end
 local function party(players)
  if App.PartyOverride then return App.PartyOverride end
- return players==1 and"solo"or(players==2 and"duo"or(players>8 and"party-plus"or"party"))
+ return players==1 and "solo"or(players==2 and "duo"or(players>8 and "party-plus"or "party"))
 end
 local function nothingActive()
  if App.NothingOverride~=nil then return App.NothingOverride end
@@ -99,7 +99,7 @@ local weights={
  ["Radar Module: Players"]=35,["Radar Module: Instruments"]=42,
 }
 local function utility(u,s,stack)
- local x=weights[u.name]or60
+ local x=weights[u.name]or 60
  local remaining=math.max(0,50-s.level)
  if u.name=="Business License"or u.name=="Paycheck"or u.name=="Fanny Pack"or u.name=="Medal"then x*=.65+math.min(1,remaining/25)end
  if s.difficulty=="Extreme"and(u.name=="Shield"or u.name=="Panic Necklace"or u.name=="Drowned Ægis"or u.name=="Subspacial Barrier")then x*=1.18 end
@@ -134,10 +134,10 @@ local ranked=text(178,155,13,Color3.fromRGB(235,235,245));local foot=text(336,18
 local hidden=false;local function con(sig,fn)local c=sig:Connect(fn);App.Connections[#App.Connections+1]=c;return c end
 con(UIS.InputBegan,function(i,p)if not p and i.KeyCode==Enum.KeyCode.RightShift then hidden=not hidden;f.Visible=not hidden end end)
 task.spawn(function()while not App.Destroyed do local s,choices,basket,spent=calculate()
- stats.Text=string.format("LEVEL %d  •  %d PLAYER(S)  •  %s/%s  •  %.0f GG%s",s.level,s.players,s.difficulty,s.party,s.money,s.nothing and"  •  NOTHING? -15%"or"")
- local names={};for _,it in ipairs(basket.list)do names[#names+1]=string.format("%s %s(%d)",it.u.name,it.stack>1 and("x"..it.stack.." ")or"",it.cost)end
- best.Text=#names>0 and("BEST BASKET — "..spent.." GG\n"..table.concat(names,"  +  "))or"BEST BASKET\nSave your Golden Gifts — nothing eligible is worth buying yet."
- local lines={"BEST INDIVIDUAL OPTIONS"};for i=1,math.min(7,#choices)do local it=choices[i];lines[#lines+1]=string.format("%d. %s%s — %d GG  [%d/100]",i,it.u.name,it.stack>1 and(" (stack "..it.stack..")")or"",it.cost,math.floor(it.score+.5))end
+ stats.Text=string.format("LEVEL %d  •  %d PLAYER(S)  •  %s/%s  •  %.0f GG%s",s.level,s.players,s.difficulty,s.party,s.money,s.nothing and "  •  NOTHING? -15%"or "")
+ local names={};for _,it in ipairs(basket.list)do names[#names+1]=string.format("%s %s(%d)",it.u.name,it.stack>1 and("x"..it.stack.." ")or "",it.cost)end
+ best.Text=#names>0 and("BEST BASKET — "..spent.." GG\n"..table.concat(names,"  +  "))or "BEST BASKET\nSave your Golden Gifts — nothing eligible is worth buying yet."
+ local lines={"BEST INDIVIDUAL OPTIONS"};for i=1,math.min(7,#choices)do local it=choices[i];lines[#lines+1]=string.format("%d. %s%s — %d GG  [%d/100]",i,it.u.name,it.stack>1 and(" (stack "..it.stack..")")or "",it.cost,math.floor(it.score+.5))end
  ranked.Text=table.concat(lines,"\n");task.wait(.5)end end)
 function App:Destroy()if self.Destroyed then return end;self.Destroyed=true;for _,c in ipairs(self.Connections)do pcall(function()c:Disconnect()end)end;gui:Destroy();if Env[KEY]==self then Env[KEY]=nil end end
 print("[Nullscape Shop AI] Loaded")
