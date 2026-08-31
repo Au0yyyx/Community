@@ -642,8 +642,63 @@ end
 
 local function actorStateFor(model)
     for _, actor in pairs(Actors.CurrentActors) do
-        if actor.Rig == model then return actor.State end
+        if actor.Rig == model then return actor.State, actor end
     end
+end
+
+local function truthyState(state, ...)
+    if type(state) ~= "table" then return false end
+    for i = 1, select("#", ...) do
+        if state[select(i, ...)] == true then return true end
+    end
+    return false
+end
+
+-- Returns the effective rates used by the live character behaviours. These are
+-- not wiki guesses: Guest Charge writes both rates to zero, Veeronica Sk8
+-- writes gain=0 and multiplies loss, Nosferatu Flight writes gain=0, and 1x's
+-- three AbilityStaminaOverride moves run their own StaminaGain heartbeat.
+local function stateRates(t, actor, state, model)
+    local name = t.Name:lower()
+    local loss, gain = t.Stats.Loss, t.Stats.Gain
+    local mode, frozen, customRegen = nil, false, false
+
+    if name:find("guest", 1, true) and truthyState(state, "Charging", "isCharging", "InCharge", "isBlockingCharge") then
+        frozen, mode = true, "CHARGE • FROZEN"
+    elseif name:find("veeronica", 1, true) and truthyState(state, "isSkating", "Skating") then
+        local cfg = actor and actor.Config or {}
+        local mult = state and state.InZone and tonumber(cfg.Sk8StaminaLoss)
+            or tonumber(cfg.Sk8StaminaLossOut)
+            or 1.1
+        loss, gain, mode = loss * mult, 0, "SK8 • " .. string.format("%.2fx", mult)
+    elseif name:find("nosferatu", 1, true) and truthyState(state, "InFlight", "isFlying") then
+        gain, mode = 0, "FLIGHT • NO REGEN"
+    elseif name:find("azure", 1, true) and truthyState(state,
+        "StaminaFrozen", "isStaminaFrozen", "DoingRitual", "isTransforming", "InTransformation") then
+        frozen, mode = true, "ABILITY • FROZEN"
+    elseif name:find("noli", 1, true) and (model:GetAttribute("VoidRushState") == "Charging"
+        or (state and state.VoidRushState == "Charging")) then
+        frozen, mode = true, "VOID RUSH • CAPPED"
+    end
+
+    if model:GetAttribute("AbilityStaminaOverride") == true then
+        if name:find("1x1x1x1", 1, true) then
+            -- Mass Infection, Entanglement and Unstable Eye all replace normal
+            -- regeneration with Config.StaminaGain * 1 after their short windup.
+            customRegen, mode = true, "ABILITY REGEN"
+        elseif not frozen then
+            gain, mode = 0, mode or "ABILITY • NO REGEN"
+        end
+    end
+
+    -- Exhausted's live StatusEffect mutates both config rates by 10% per level.
+    local exhausted = tonumber(model:GetAttribute("ExhaustedLevel") or model:GetAttribute("Exhausted"))
+    if exhausted and exhausted > 0 then
+        loss *= 1 + 0.1 * exhausted
+        gain *= math.max(0, 1 - 0.1 * exhausted)
+        mode = (mode and mode .. " • " or "") .. "EXHAUSTED " .. exhausted
+    end
+    return loss, gain, frozen, customRegen, mode
 end
 
 local function sprintState(tracker, humanoid, actorState, now)
@@ -763,9 +818,11 @@ connect(RunService.Heartbeat, function(dt)
                 rawSpeed = Vector3.new(delta.X, 0, delta.Z).Magnitude / dt
                 if rawSpeed > 80 then rawSpeed = 0 end
             end
+            local velocity = root.AssemblyLinearVelocity
+            rawSpeed = math.max(rawSpeed, Vector3.new(velocity.X, 0, velocity.Z).Magnitude)
             t.LastPosition = position
             t.SmoothedSpeed += (rawSpeed - t.SmoothedSpeed) * math.clamp(dt * 12, 0, 1)
-            local state = t.Type == "Killer" and actorStateFor(model)
+            local state, actor = actorStateFor(model)
             local enraged = t.Stats.EnragedCap ~= nil
                 and ((state and state.isEnraged == true) or t.EnragedAnimation)
             if enraged and not t.Enraged then t.EnragedSince = now end
@@ -788,9 +845,10 @@ connect(RunService.Heartbeat, function(dt)
                 local grace = math.clamp(App.PingSeconds * 2.25 + 0.12, 0.2, 1.5)
                 sprinting = now - t.LastSprintEvidence <= grace
             end
-            local draining = sprinting and t.DrainAllowed
+            local effectiveLoss, effectiveGain, frozen, customRegen, specialMode = stateRates(t, actor, state, model)
+            local draining = sprinting and t.DrainAllowed and not frozen
             if draining then
-                t.Estimate = math.max(0, t.Estimate - t.Stats.Loss * dt)
+                t.Estimate = math.max(0, t.Estimate - effectiveLoss * dt)
                 -- Mirrors Systems.Character.Game.Sprinting: the recovery wait
                 -- grows slowly while sprinting, from 0.2 up to 2 seconds.
                 t.RecoveryDelay = math.clamp(t.RecoveryDelay + dt * 0.05, 0.2, 2)
@@ -803,8 +861,10 @@ connect(RunService.Heartbeat, function(dt)
                 t.RecoveryDelay = math.max(0, t.RecoveryDelay - dt)
             end
             local staminaOverride = model:GetAttribute("AbilityStaminaOverride") == true
-            if not draining and t.RecoveryDelay <= 0 and not staminaOverride then
-                t.Estimate = math.min(staminaCap, t.Estimate + t.Stats.Gain * dt)
+            local penalty = model:GetAttribute("StaminaPenaltyActive") == true
+            if not frozen and not draining and t.RecoveryDelay <= 0 and not penalty
+                and (not staminaOverride or customRegen) then
+                t.Estimate = math.min(staminaCap, t.Estimate + effectiveGain * dt)
             end
             t.WasSprinting = draining
             t.Estimate = math.min(t.Estimate, staminaCap)
@@ -815,10 +875,13 @@ connect(RunService.Heartbeat, function(dt)
             if t.Type == "Killer" then
                 t.Detail.Text = enraged
                     and string.format("KILLER • RAGING PACE • CAP %.0f", staminaCap)
-                    or string.format("KILLER • %s • %.1fs", sprinting and "SPRINT" or
-                        (t.RecoveryDelay > 0 and "RECOVERY WAIT" or "REGEN"), t.RecoveryDelay)
+                    or string.format("KILLER • %s • %s%.1f/s", specialMode or
+                        (sprinting and "SPRINT" or (t.RecoveryDelay > 0 and "RECOVERY WAIT" or "REGEN")),
+                        draining and "-" or "+", draining and effectiveLoss or effectiveGain)
             else
-                t.Detail.Text = string.format("SURVIVOR • %s • %.1f speed", sprinting and "DRAIN" or "REGEN", t.SmoothedSpeed)
+                t.Detail.Text = string.format("SURVIVOR • %s • %s%.1f/s", specialMode or
+                    (sprinting and "DRAIN" or (t.RecoveryDelay > 0 and "RECOVERY WAIT" or "REGEN")),
+                    draining and "-" or "+", draining and effectiveLoss or effectiveGain)
             end
         end
     end
@@ -834,8 +897,7 @@ function App:Destroy()
 end
 
 print("[Forsaken Stamina Tracker V2] Loaded - role-aware")
-
-]====]
+    ]====]
     local trackerStatus = Groupbox:AddLabel("Status: Disabled")
 
     local function unloadTracker()
