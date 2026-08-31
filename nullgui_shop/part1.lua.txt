@@ -1,0 +1,1345 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+----------------------some IY funcs (just clipboard ig)
+function missing(t, f, fallback)
+	if type(f) == t then return f end
+	return fallback
+end
+
+local everyClipboard = missing("function", setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set))
+
+function toClipboard(txt)
+	if everyClipboard then
+		everyClipboard(tostring(txt))
+		notif("Copied to clipboard", "Clipboard")
+	else
+		notif("Your exploit doesn't have the ability to use the clipboard", "Clipboard")
+	end
+end
+
+local fSignal = missing("function", firesignal)
+
+function fireSig(signal, args:table)
+    if fSignal then
+        fSignal(signal, args)
+    else
+        notif("Your exploit doesn't have the ability to use this function.", "firesignal")
+    end
+end
+
+--------------------------------------------------------
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local PlaceId, JobId = game.PlaceId, game.JobId
+
+------------------------------------------------
+if ReplicatedStorage:FindFirstChild("DESTROYNULLGUI") then
+    ReplicatedStorage:FindFirstChild("DESTROYNULLGUI"):Destroy()
+
+    StarterGui:SetCore("SendNotification", {
+        Title = "NULL GUI PRE-EXECUTE",
+        Text = "Null GUI already executed! Destroying old GUI...",
+        Duration = 3
+    })
+    task.wait(1.5)
+end
+
+;(function()
+    local coreGui = game:GetService("CoreGui")
+    for _, descendant in ipairs(coreGui:GetDescendants()) do
+        if descendant:IsA("ScreenGui") and descendant.Name == "Rayfield" then
+            pcall(function()
+                descendant:Destroy()
+            end)
+        end
+    end
+end)()
+------------------------------------------------
+
+local plr = Players.LocalPlayer
+
+local events = ReplicatedStorage.Events
+
+local Camera = workspace.CurrentCamera
+local spawnPart = workspace.Spawn
+local items = workspace.Item_Pools
+local gifts = items.Gift
+local goldengifts = items.GoldenGift
+local tripmines = items.Tripmine
+local goldentripmines = items:FindFirstChild("GoldTripmines")
+local enemies = workspace.Enemies
+--local giftEsp = workspace.Showlocation
+--local tripEsp = workspace.TripmineShowlocation
+local selection = workspace:FindFirstChild("Select")
+local collectGift: RemoteEvent = events.GiftCollected
+local currentRooms = workspace.CurrentRooms
+local pads = workspace.JumpPads
+local code = ReplicatedStorage.CodeVal
+local music = ReplicatedStorage.MusicVal
+local curses = ReplicatedStorage.CurseFolder.Curses
+local gcurses = ReplicatedStorage.GreaterCurseFolder.Curses
+local enemiesFolder = ReplicatedStorage.EnemyFolder
+local upgrades = ReplicatedStorage.UpgradeFolder.Upgrades
+local beacons = workspace.Beacons
+local destroyFolder = workspace.DestroyFolder
+local bullets = items.Bullet
+local counters = ReplicatedStorage.GiftCounters
+local magnet = events.MovementGiftMagnet
+
+local tripmineprots = Instance.new("Folder")
+tripmineprots.Parent = workspace
+tripmineprots.Name = "Tripmine Protection (NULL GUI)"
+
+local bulletprots = Instance.new("Folder")
+bulletprots.Parent = workspace
+bulletprots.Name = "Guardian Bullets Protection (NULL GUI)"
+
+local velocityPart = Instance.new("Part")
+velocityPart.Name = "VelocityVisualizer"
+velocityPart.Anchored = true
+velocityPart.CanCollide = false
+velocityPart.CanTouch = false
+velocityPart.Material = Enum.Material.Air
+velocityPart.Color = Color3.new(1, 1, 1)
+velocityPart.Size = Vector3.new(0.1, 0.1, 1)
+velocityPart.Parent = workspace
+local vpBox = Instance.new("BoxHandleAdornment")
+vpBox.Color3 = Color3.new(1,1,1)
+vpBox.AlwaysOnTop = true
+vpBox.ZIndex = 0
+vpBox.Adornee = velocityPart
+vpBox.Parent = velocityPart
+
+local notifOn = true
+local destroying = false
+
+local tweening = false
+local aura = false
+local cesp = false
+local mesp = false
+local visibleHitbox = false
+local canInstaGrapple = false
+local canToggleAura = true
+local canGoHome = true
+local canGoBeacon = true
+local canEzDisableAll = true
+local canEzDisableAllC = true
+local canEzCollectNormal = true
+local canEzCollectGolden = true
+local canEzCollectMedal = true
+local canFullReset = true
+local canBringPad = true
+local canBringTria = true
+local canGliderBoost = false
+local canCancelTween = false
+local av = false
+local noice = false
+local noflesh = false
+local pt = false
+local pb = false
+local dvi = false
+local dsm = false
+local dso = false
+local velov = false
+local nrb = false
+local nfb = false
+local gliderBoost = false
+local connections = {}
+local celestialIntegration = {}
+
+local clientenemies = {
+    "Kolona",
+    "Voidbreaker",
+    "Skinwalker",
+    "Operator",
+    "Scrapmaw"
+}
+
+
+local availableNormalGifts = {}
+local availableGoldenGifts = {}
+local newInstances = {}
+local cgb
+local mb
+
+(function()
+local environment = getgenv and getgenv() or _G
+local previousCelestialControllers = {}
+local seenCelestialControllers = {}
+
+local function registerPreviousCelestialController(candidate)
+    if type(candidate) ~= "table" or seenCelestialControllers[candidate] then
+        return
+    end
+
+    seenCelestialControllers[candidate] = true
+    table.insert(previousCelestialControllers, candidate)
+end
+
+registerPreviousCelestialController(environment.CelestialVisibleHarmlessController)
+
+local previousCelestialRegistry = environment.CelestialVisibleHarmlessControllers
+if type(previousCelestialRegistry) == "table" then
+    for registryKey, registryValue in pairs(previousCelestialRegistry) do
+        registerPreviousCelestialController(registryKey)
+        registerPreviousCelestialController(registryValue)
+    end
+end
+
+for _, previousController in ipairs(previousCelestialControllers) do
+    if type(previousController.Panic) == "function" then
+        pcall(function()
+            previousController:Panic()
+        end)
+    end
+
+    pcall(function()
+        previousController.Enabled = false
+        previousController.Destroyed = true
+
+        if type(previousController.DisconnectAll) == "function" then
+            previousController:DisconnectAll()
+        end
+
+        if type(previousController.RestorePatchedModules) == "function" then
+            previousController:RestorePatchedModules()
+        end
+
+        if type(previousController.DestroyGiftCounter) == "function" then
+            previousController:DestroyGiftCounter()
+        end
+    end)
+end
+
+environment.CelestialVisibleHarmlessController = nil
+environment.CelestialVisibleHarmlessControllers = {}
+end)()
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+   Name = "Nullscape GUI",
+   LoadingTitle = "Loading Nullscape GUI",
+   LoadingSubtitle = "by John Nullscape (Ali)",
+   ShowText = "Null!",
+
+   ToggleUIKeybind = "K",
+   DisableRayfieldPrompts = true,
+   DisableBuildWarnings = true,
+   ConfigurationSaving = {
+       Enabled = false
+   }
+})
+
+function notif(text: string, title: string, dur: number)
+    Rayfield:Notify({
+        Title = title or "Notification",
+        Content = text or "Forgot to add text idiot",
+        Duration = dur or 5
+    })
+end
+
+local mainTab = Window:CreateTab("Main")
+local upgradeTab = Window:CreateTab("Upgrades")
+local enemyTab = Window:CreateTab("Enemy")
+local mapTab = Window:CreateTab("Map")
+local plrTab = Window:CreateTab("Player")
+local visualTab = Window:CreateTab("Visual")
+local keyTab = Window:CreateTab("Keybinds")
+local musicTab = Window:CreateTab("Music")
+local debugTab = Window:CreateTab("Debug")
+local shopAITab = Window:CreateTab("Shop AI")
+celestialIntegration.AutoFarmTab = Window:CreateTab("Auto-Farm")
+celestialIntegration.ConfigurationTab = Window:CreateTab("Configuration");
+
+-- Compact Shop Calculator AI, hosted inside NULLGUI instead of occupying the
+-- game view with a second full panel.
+shopAITab:CreateSection("Live Shop Calculator")
+local shopStatusLabel = shopAITab:CreateLabel("Loading live shop data...")
+local shopBestLabel = shopAITab:CreateLabel("Best basket: calculating...")
+local shopRankedLabel = shopAITab:CreateLabel("Recommendations: calculating...")
+local shopAIController
+local shopOverlayEnabled = false
+
+local function loadShopAI()
+    local previous = (getgenv and getgenv() or _G).__NullscapeShopAI_V1
+    if type(previous) == "table" and type(previous.Destroy) == "function" then
+        pcall(previous.Destroy, previous)
+    end
+    local ok, result = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Au0yyyx/Community/main/nullscape_shop_ai.lua?t=" .. os.time()))()
+    end)
+    shopAIController = (getgenv and getgenv() or _G).__NullscapeShopAI_V1
+    if not ok or type(shopAIController) ~= "table" then
+        shopStatusLabel:Set("Shop AI failed: " .. tostring(result))
+        return
+    end
+    if shopAIController.Frame then shopAIController.Frame.Visible = shopOverlayEnabled end
+end
+
+shopAITab:CreateDropdown({
+    Name = "Party Pricing",
+    Options = {"Auto", "Solo", "Duo", "Party", "Party+"},
+    CurrentOption = {"Auto"},
+    MultipleOptions = false,
+    Flag = "NULLGUIShopAIPartyPricing",
+    Callback = function(options)
+        local selected = options[1] or "Auto"
+        local modes = {Solo = "solo", Duo = "duo", Party = "party", ["Party+"] = "party-plus"}
+        if shopAIController then shopAIController.PartyOverride = modes[selected] end
+    end
+})
+shopAITab:CreateToggle({
+    Name = "Compact In-Game Overlay",
+    CurrentValue = false,
+    Flag = "NULLGUIShopAIOverlay",
+    Callback = function(value)
+        shopOverlayEnabled = value == true
+        if shopAIController and shopAIController.Frame then shopAIController.Frame.Visible = shopOverlayEnabled end
+    end
+})
+shopAITab:CreateButton({Name = "Reload Calculator Data", Callback = loadShopAI})
+
+task.spawn(function()
+    loadShopAI()
+    while not destroying do
+        local snapshot = shopAIController and shopAIController.Snapshot
+        if snapshot then
+            shopStatusLabel:Set(snapshot.Settings)
+            shopBestLabel:Set(snapshot.Best)
+            shopRankedLabel:Set(snapshot.Ranked)
+            if shopAIController.Frame then shopAIController.Frame.Visible = shopOverlayEnabled end
+        end
+        task.wait(0.5)
+    end
+end)
+
+(function()
+    local configurationManager = {
+        RootFolder = "NullscapeGUI",
+        ConfigFolder = "NullscapeGUI/NamedConfigs",
+        ManifestPath = "NullscapeGUI/NamedConfigs.json",
+        EmptyOption = "No saved configs",
+        ElementsByFlag = {},
+        Manifest = {
+            Version = 1,
+            Configs = {},
+            Autoload = nil
+        },
+        PendingName = "",
+        SelectedName = nil,
+        ConfigDropdown = nil,
+        AutoloadLabel = nil
+    }
+    local configurableMethods = {
+        "CreateToggle",
+        "CreateSlider",
+        "CreateDropdown",
+        "CreateKeybind",
+        "CreateInput",
+        "CreateColorPicker"
+    }
+    local tabsByName = {
+        Main = mainTab,
+        Upgrades = upgradeTab,
+        Enemy = enemyTab,
+        Map = mapTab,
+        Player = plrTab,
+        Visual = visualTab,
+        Keybinds = keyTab,
+        Music = musicTab,
+        Debug = debugTab,
+        ShopAI = shopAITab,
+        AutoFarm = celestialIntegration.AutoFarmTab,
+        Configuration = celestialIntegration.ConfigurationTab
+    }
+    local usedFlags = {}
+    local flagOccurrences = {}
+
+    celestialIntegration.ConfigurationManager = configurationManager
+
+    function configurationManager:NotifyResult(success, message)
+        notif(message, success and "Configuration" or "Configuration Error")
+    end
+
+    function configurationManager:EnsureStorage()
+        if type(writefile) ~= "function" then
+            return false, "Your executor is missing writefile."
+        end
+
+        if type(readfile) ~= "function" then
+            return false, "Your executor is missing readfile."
+        end
+
+        if type(isfile) ~= "function" then
+            return false, "Your executor is missing isfile."
+        end
+
+        if type(makefolder) ~= "function" then
+            return false, "Your executor is missing makefolder."
+        end
+
+        if type(isfolder) ~= "function" then
+            return false, "Your executor is missing isfolder."
+        end
+
+        local storageReady, storageError = pcall(function()
+            if not isfolder(self.RootFolder) then
+                makefolder(self.RootFolder)
+            end
+
+            if not isfolder(self.ConfigFolder) then
+                makefolder(self.ConfigFolder)
+            end
+        end)
+
+        if not storageReady then
+            return false, "Could not create the config folder: " .. tostring(storageError)
+        end
+
+        return true
+    end
+
+    function configurationManager:NormalizeName(configName)
+        local normalizedName = tostring(configName or "")
+            :gsub("^%s+", "")
+            :gsub("%s+$", "")
+
+        if normalizedName == "" then
+            return nil, "Enter a config name first."
+        end
+
+        if #normalizedName > 48 then
+            return nil, "Config names must be 48 characters or fewer."
+        end
+
+        if normalizedName:find("[^%w _%-]") then
+            return nil, "Use only letters, numbers, spaces, underscores, or hyphens."
+        end
+
+        return normalizedName
+    end
+
+    function configurationManager:GetConfigPath(configName)
+        return self.ConfigFolder .. "/" .. configName .. ".json"
+    end
+
+    function configurationManager:FindExistingName(configName)
+        local lowercaseName = configName:lower()
+
+        for _, existingName in ipairs(self.Manifest.Configs) do
+            if existingName:lower() == lowercaseName then
+                return existingName
+            end
+        end
+
+        return nil
+    end
+
+    function configurationManager:SortConfigNames()
+        table.sort(self.Manifest.Configs, function(leftName, rightName)
+            return leftName:lower() < rightName:lower()
+        end)
+    end
+
+    function configurationManager:WriteJson(path, value)
+        local encodedSuccessfully, encodedValue = pcall(function()
+            return HttpService:JSONEncode(value)
+        end)
+
+        if not encodedSuccessfully then
+            return false, "Could not encode config data: " .. tostring(encodedValue)
+        end
+
+        local writtenSuccessfully, writeError = pcall(function()
+            writefile(path, encodedValue)
+        end)
+
+        if not writtenSuccessfully then
+            return false, "Could not write config data: " .. tostring(writeError)
+        end
+
+        return true
+    end
+
+    function configurationManager:ReadJson(path)
+        local readSuccessfully, fileContents = pcall(function()
+            return readfile(path)
+        end)
+
+        if not readSuccessfully then
+            return nil, "Could not read config data: " .. tostring(fileContents)
+        end
+
+        local decodedSuccessfully, decodedValue = pcall(function()
+            return HttpService:JSONDecode(fileContents)
+        end)
+
+        if not decodedSuccessfully then
+            return nil, "Config data is invalid: " .. tostring(decodedValue)
+        end
+
+        return decodedValue
+    end
+
+    function configurationManager:SaveManifest()
+        local storageReady, storageError = self:EnsureStorage()
+        if not storageReady then
+            return false, storageError
+        end
+
+        self.Manifest.Version = 1
+        self:SortConfigNames()
+        return self:WriteJson(self.ManifestPath, self.Manifest)
+    end
+
+    function configurationManager:LoadManifest()
+        local storageReady, storageError = self:EnsureStorage()
+        if not storageReady then
+            return false, storageError
+        end
+
+        local manifest = {
+            Version = 1,
+            Configs = {},
+            Autoload = nil
+        }
+
+        if isfile(self.ManifestPath) then
+            local storedManifest, manifestError = self:ReadJson(self.ManifestPath)
+            if not storedManifest then
+                return false, manifestError
+            end
+
+            if type(storedManifest) ~= "table" then
+                return false, "The config index is invalid."
+            end
+
+            if type(storedManifest.Configs) == "table" then
+                manifest.Configs = storedManifest.Configs
+            end
+
+            if type(storedManifest.Autoload) == "string" then
+                manifest.Autoload = storedManifest.Autoload
+            end
+        end
+
+        local discoveredNames = {}
+        for _, configName in ipairs(manifest.Configs) do
+            local normalizedName = type(configName) == "string" and self:NormalizeName(configName) or nil
+            if normalizedName and isfile(self:GetConfigPath(normalizedName)) then
+                discoveredNames[normalizedName:lower()] = normalizedName
+            end
+        end
+
+        if type(listfiles) == "function" then
+            local listedSuccessfully, listedFiles = pcall(function()
+                return listfiles(self.ConfigFolder)
+            end)
+
+            if listedSuccessfully and type(listedFiles) == "table" then
+                for _, configPath in ipairs(listedFiles) do
+                    local configName = tostring(configPath):match("([^/\\]+)%.json$")
+                    local normalizedName = configName and self:NormalizeName(configName) or nil
+                    if normalizedName then
+                        discoveredNames[normalizedName:lower()] = normalizedName
+                    end
+                end
+            end
+        end
+
+        manifest.Configs = {}
+        for _, configName in pairs(discoveredNames) do
+            table.insert(manifest.Configs, configName)
+        end
+
+        if manifest.Autoload and not discoveredNames[manifest.Autoload:lower()] then
+            manifest.Autoload = nil
+        end
+
+        self.Manifest = manifest
+        self:SortConfigNames()
+        return self:SaveManifest()
+    end
+
+    function configurationManager:PackValue(value)
+        local valueType = typeof(value)
+
+        if valueType == "Color3" then
+            return {
+                NULLGUIType = "Color3",
+                R = value.R,
+                G = value.G,
+                B = value.B
+            }
+        end
+
+        if valueType == "EnumItem" then
+            return {
+                NULLGUIType = "EnumItem",
+                Name = value.Name
+            }
+        end
+
+        if valueType == "table" then
+            local packedTable = {}
+            for key, nestedValue in pairs(value) do
+                packedTable[key] = self:PackValue(nestedValue)
+            end
+            return packedTable
+        end
+
+        if valueType == "boolean" or valueType == "number" or valueType == "string" then
+            return value
+        end
+
+        return nil
+    end
+
+    function configurationManager:UnpackValue(value)
+        if type(value) ~= "table" then
+            return value
+        end
+
+        if value.NULLGUIType == "Color3" then
+            return Color3.new(value.R or 0, value.G or 0, value.B or 0)
+        end
+
+        if value.NULLGUIType == "EnumItem" then
+            return value.Name
+        end
+
+        local unpackedTable = {}
+        for key, nestedValue in pairs(value) do
+            unpackedTable[key] = self:UnpackValue(nestedValue)
+        end
+        return unpackedTable
+    end
+
+    function configurationManager:GetElementValue(elementRecord)
+        local element = elementRecord.Element
+
+        if elementRecord.MethodName == "CreateKeybind" then
+            return element.CurrentKeybind
+        end
+
+        if elementRecord.MethodName == "CreateDropdown" then
+            return element.CurrentOption
+        end
+
+        if elementRecord.MethodName == "CreateColorPicker" then
+            return element.Color
+        end
+
+        return element.CurrentValue
+    end
+
+    function configurationManager:CaptureValues()
+        local capturedValues = {}
+
+        for flag, elementRecord in pairs(self.ElementsByFlag) do
+            local currentValue = self:GetElementValue(elementRecord)
+            if currentValue ~= nil then
+                capturedValues[flag] = self:PackValue(currentValue)
+            end
+        end
+
+        return capturedValues
+    end
+
+    function configurationManager:GetDropdownOptions()
+        if #self.Manifest.Configs == 0 then
+            return {self.EmptyOption}
+        end
+
+        local options = {}
+        for _, configName in ipairs(self.Manifest.Configs) do
+            table.insert(options, configName)
+        end
+        return options
+    end
+
+    function configurationManager:UpdateAutoloadLabel()
+        if not self.AutoloadLabel then
+            return
+        end
+
+        self.AutoloadLabel:Set("Autoload: " .. (self.Manifest.Autoload or "None"))
+    end
+
+    function configurationManager:RefreshDropdown(preferredName)
+        if not self.ConfigDropdown then
+            return
+        end
+
+        local options = self:GetDropdownOptions()
+        self.ConfigDropdown:Refresh(options)
+
+        local selectedName = preferredName and self:FindExistingName(preferredName) or nil
+        if not selectedName then
+            selectedName = self:FindExistingName(self.SelectedName or "")
+        end
+
+        if not selectedName and #self.Manifest.Configs > 0 then
+            selectedName = self.Manifest.Configs[1]
+        end
+
+        self.ConfigDropdown:Set({selectedName or self.EmptyOption})
+    end
+
+    function configurationManager:RefreshList(preferredName)
+        local manifestLoaded, manifestError = self:LoadManifest()
+        if not manifestLoaded then
+            return false, manifestError
+        end
+
+        self:RefreshDropdown(preferredName)
+        self:UpdateAutoloadLabel()
+        return true, "Config list refreshed."
+    end
+
+    function configurationManager:SaveConfig(configName, overwriteExisting)
+        local storageReady, storageError = self:EnsureStorage()
+        if not storageReady then
+            return false, storageError
+        end
+
+        local normalizedName, nameError = self:NormalizeName(configName)
+        if not normalizedName then
+            return false, nameError
+        end
+
+        local existingName = self:FindExistingName(normalizedName)
+        if existingName and not overwriteExisting then
+            return false, "That config already exists. Select it and use overwrite."
+        end
+
+        if overwriteExisting and not existingName then
+            return false, "Select an existing config to overwrite."
+        end
+
+        local savedName = existingName or normalizedName
+        local configData = {
+            Version = 1,
+            Name = savedName,
+            SavedAt = os.time(),
+            Values = self:CaptureValues()
+        }
+        local configSaved, configError = self:WriteJson(self:GetConfigPath(savedName), configData)
+        if not configSaved then
+            return false, configError
+        end
+
+        if not existingName then
+            table.insert(self.Manifest.Configs, savedName)
+        end
+
+        local manifestSaved, manifestError = self:SaveManifest()
+        if not manifestSaved then
+            return false, manifestError
+        end
+
+        self:RefreshDropdown(savedName)
+        return true, overwriteExisting and "Config overwritten: " .. savedName or "Config saved: " .. savedName
+    end
+
+    function configurationManager:LoadConfig(configName, silent)
+        local existingName = configName and self:FindExistingName(configName) or nil
+        if not existingName then
+            return false, "Select a saved config first."
+        end
+
+        local configData, configError = self:ReadJson(self:GetConfigPath(existingName))
+        if not configData then
+            return false, configError
+        end
+
+        if type(configData.Values) ~= "table" then
+            return false, "That config does not contain valid settings."
+        end
+
+        local elementRecords = {}
+        for flag, packedValue in pairs(configData.Values) do
+            local elementRecord = self.ElementsByFlag[flag]
+            if elementRecord then
+                table.insert(elementRecords, {
+                    Flag = flag,
+                    PackedValue = packedValue,
+                    ElementRecord = elementRecord
+                })
+            end
+        end
+
+        table.sort(elementRecords, function(leftRecord, rightRecord)
+            local priorities = {
+                CreateKeybind = 1,
+                CreateInput = 2,
+                CreateDropdown = 2,
+                CreateSlider = 2,
+                CreateColorPicker = 2,
+                CreateToggle = 3
+            }
+            local leftPriority = priorities[leftRecord.ElementRecord.MethodName] or 2
+            local rightPriority = priorities[rightRecord.ElementRecord.MethodName] or 2
+
+            if leftPriority == rightPriority then
+                return leftRecord.Flag < rightRecord.Flag
+            end
+
+            return leftPriority < rightPriority
+        end)
+
+        local failedSettings = 0
+        for _, loadRecord in ipairs(elementRecords) do
+            local settingLoaded, settingError = pcall(function()
+                loadRecord.ElementRecord.Element:Set(self:UnpackValue(loadRecord.PackedValue))
+            end)
+
+            if not settingLoaded then
+                failedSettings += 1
+                warn("[NULLGUI Configuration] Could not load " .. loadRecord.Flag .. ": " .. tostring(settingError))
+            end
+        end
+
+        self.SelectedName = existingName
+        self:RefreshDropdown(existingName)
+
+        if failedSettings > 0 then
+            return true, "Loaded " .. existingName .. " with " .. failedSettings .. " setting error(s)."
+        end
+
+        if silent then
+            return true
+        end
+
+        return true, "Config loaded: " .. existingName
+    end
+
+    function configurationManager:DeleteConfig(configName)
+        local existingName = configName and self:FindExistingName(configName) or nil
+        if not existingName then
+            return false, "Select a saved config first."
+        end
+
+        if type(delfile) ~= "function" then
+            return false, "Your executor is missing delfile."
+        end
+
+        local deletedSuccessfully, deleteError = pcall(function()
+            delfile(self:GetConfigPath(existingName))
+        end)
+
+        if not deletedSuccessfully then
+            return false, "Could not delete the config: " .. tostring(deleteError)
+        end
+
+        for configIndex, storedName in ipairs(self.Manifest.Configs) do
+            if storedName == existingName then
+                table.remove(self.Manifest.Configs, configIndex)
+                break
+            end
+        end
+
+        if self.Manifest.Autoload == existingName then
+            self.Manifest.Autoload = nil
+        end
+
+        self.SelectedName = nil
+        local manifestSaved, manifestError = self:SaveManifest()
+        if not manifestSaved then
+            return false, manifestError
+        end
+
+        self:RefreshDropdown()
+        self:UpdateAutoloadLabel()
+        return true, "Config deleted: " .. existingName
+    end
+
+    function configurationManager:SetAutoload(configName)
+        local existingName = configName and self:FindExistingName(configName) or nil
+        if not existingName then
+            return false, "Select a saved config first."
+        end
+
+        self.Manifest.Autoload = existingName
+        local manifestSaved, manifestError = self:SaveManifest()
+        if not manifestSaved then
+            return false, manifestError
+        end
+
+        self:UpdateAutoloadLabel()
+        return true, "Autoload set to: " .. existingName
+    end
+
+    function configurationManager:ClearAutoload()
+        self.Manifest.Autoload = nil
+        local manifestSaved, manifestError = self:SaveManifest()
+        if not manifestSaved then
+            return false, manifestError
+        end
+
+        self:UpdateAutoloadLabel()
+        return true, "Autoload cleared."
+    end
+
+    function configurationManager:Initialize()
+        local manifestLoaded, manifestError = self:RefreshList()
+        if not manifestLoaded then
+            warn("[NULLGUI Configuration] " .. tostring(manifestError))
+            if self.AutoloadLabel then
+                self.AutoloadLabel:Set("Autoload: Filesystem unavailable")
+            end
+            return
+        end
+
+        if self.Manifest.Autoload then
+            local configLoaded, configError = self:LoadConfig(self.Manifest.Autoload, true)
+            if not configLoaded then
+                warn("[NULLGUI Configuration] " .. tostring(configError))
+            end
+        end
+    end
+
+    local function sanitizeFlagPart(value)
+        local sanitizedValue = tostring(value or "Control")
+            :gsub("[^%w_]", "_")
+            :gsub("_+", "_")
+            :gsub("^_+", "")
+            :gsub("_+$", "")
+
+        if sanitizedValue == "" then
+            return "Control"
+        end
+
+        return sanitizedValue
+    end
+
+    local function generateFlag(tabName, methodName, controlName)
+        local baseFlag = table.concat({
+            "NULLGUI",
+            sanitizeFlagPart(tabName),
+            sanitizeFlagPart(methodName),
+            sanitizeFlagPart(controlName)
+        }, "_")
+        local occurrence = (flagOccurrences[baseFlag] or 0) + 1
+        local generatedFlag = occurrence == 1 and baseFlag or baseFlag .. "_" .. occurrence
+
+        while usedFlags[generatedFlag] do
+            occurrence += 1
+            generatedFlag = baseFlag .. "_" .. occurrence
+        end
+
+        flagOccurrences[baseFlag] = occurrence
+        usedFlags[generatedFlag] = true
+        return generatedFlag
+    end
+
+    local function installConfigurableMethod(tabName, tab, methodName)
+        local originalMethod = tab[methodName]
+
+        if type(originalMethod) ~= "function" then
+            return
+        end
+
+        tab[methodName] = function(self, settings)
+            local excludeFromConfig = settings and settings.NULLGUIExcludeFromConfig == true
+            local isTransientDropdown = methodName == "CreateDropdown"
+                and type(settings) == "table"
+                and type(settings.Options) == "table"
+                and #settings.Options == 0
+
+            if type(settings) == "table" then
+                if not excludeFromConfig and not isTransientDropdown and (settings.Flag == nil or settings.Flag == "") then
+                    settings.Flag = generateFlag(tabName, methodName, settings.Name)
+                elseif settings.Flag and settings.Flag ~= "" then
+                    usedFlags[settings.Flag] = true
+                end
+            end
+
+            local createdElement = originalMethod(self, settings)
+            if not excludeFromConfig
+                and not isTransientDropdown
+                and type(settings) == "table"
+                and settings.Flag
+                and createdElement
+            then
+                configurationManager.ElementsByFlag[settings.Flag] = {
+                    Element = createdElement,
+                    MethodName = methodName,
+                    Name = settings.Name
+                }
+            end
+
+            return createdElement
+        end
+    end
+
+    for tabName, tab in pairs(tabsByName) do
+        for _, methodName in ipairs(configurableMethods) do
+            installConfigurableMethod(tabName, tab, methodName)
+        end
+    end
+end)()
+
+;(function()
+    local controller = {
+        Destroyed = false,
+        AntiAfk = false,
+        AntiBlur = false,
+        RemoveScorchedVisuals = false,
+        LowPoly = false,
+        Connections = {},
+        BlurStates = {},
+        ScorchedStates = {},
+        LowPolyStates = setmetatable({}, { __mode = "k" }),
+        CadenceVisuals = {},
+        Cadence = {
+            Cham = false,
+            Arrow = false,
+            Line = false,
+            ChamFillColor = Color3.fromRGB(255, 220, 0),
+            ChamOutlineColor = Color3.fromRGB(255, 255, 255),
+            ChamFillOpacity = 25,
+            ChamOutlineOpacity = 100,
+            ArrowColor = Color3.fromRGB(255, 220, 0),
+            ArrowOpacity = 75,
+            LineColor = Color3.fromRGB(255, 220, 0),
+            LineOpacity = 75,
+        },
+        VirtualUser = game:GetService("VirtualUser"),
+    }
+
+    celestialIntegration.UtilityController = controller
+
+    function controller:Track(connection)
+        table.insert(self.Connections, connection)
+        return connection
+    end
+
+    function controller:DisconnectState(state)
+        if not state or not state.Connections then
+            return
+        end
+
+        for _, connection in ipairs(state.Connections) do
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+        table.clear(state.Connections)
+    end
+
+    function controller:RestoreBlur(blurEffect)
+        local state = self.BlurStates[blurEffect]
+        if not state then
+            return
+        end
+
+        self.BlurStates[blurEffect] = nil
+        self:DisconnectState(state)
+        if blurEffect.Parent then
+            pcall(function()
+                blurEffect.Enabled = state.Enabled
+                blurEffect.Size = state.Size
+            end)
+        end
+    end
+
+    function controller:SuppressBlur(blurEffect)
+        if not self.AntiBlur or not blurEffect:IsA("BlurEffect") then
+            return
+        end
+
+        local state = self.BlurStates[blurEffect]
+        if not state then
+            state = {
+                Enabled = blurEffect.Enabled,
+                Size = blurEffect.Size,
+                Connections = {},
+            }
+            self.BlurStates[blurEffect] = state
+
+            local function enforceBlurSuppression()
+                if self.AntiBlur
+                    and self.BlurStates[blurEffect] == state
+                    and blurEffect.Parent then
+                    if blurEffect.Enabled then
+                        blurEffect.Enabled = false
+                    end
+                    if blurEffect.Size ~= 0 then
+                        blurEffect.Size = 0
+                    end
+                end
+            end
+
+            table.insert(state.Connections, blurEffect:GetPropertyChangedSignal("Enabled"):Connect(enforceBlurSuppression))
+            table.insert(state.Connections, blurEffect:GetPropertyChangedSignal("Size"):Connect(enforceBlurSuppression))
+        end
+
+        blurEffect.Enabled = false
+        blurEffect.Size = 0
+    end
+
+    function controller:RefreshBlur()
+        if self.AntiBlur then
+            for _, descendant in ipairs(game:GetDescendants()) do
+                if descendant:IsA("BlurEffect") then
+                    self:SuppressBlur(descendant)
+                end
+            end
+            return
+        end
+
+        local blurEffects = {}
+        for blurEffect in pairs(self.BlurStates) do
+            table.insert(blurEffects, blurEffect)
+        end
+        for _, blurEffect in ipairs(blurEffects) do
+            self:RestoreBlur(blurEffect)
+        end
+    end
+
+    function controller:IsScorchedVisual(instance)
+        local isVisual = instance:IsA("ParticleEmitter")
+            or instance:IsA("Trail")
+            or instance:IsA("Beam")
+            or instance:IsA("Fire")
+            or instance:IsA("Smoke")
+            or instance:IsA("Highlight")
+        if not isVisual then
+            return false
+        end
+
+        local current = instance
+        while current and current ~= workspace do
+            if string.find(string.lower(current.Name), "scorch", 1, true) then
+                return true
+            end
+            current = current.Parent
+        end
+        return false
+    end
+
+    function controller:RestoreScorchedVisual(instance)
+        local state = self.ScorchedStates[instance]
+        if not state then
+            return
+        end
+
+        self.ScorchedStates[instance] = nil
+        self:DisconnectState(state)
+        if instance.Parent then
+            pcall(function()
+                instance.Enabled = state.Enabled
+            end)
+        end
+    end
+
+    function controller:SuppressScorchedVisual(instance)
+        if not self.RemoveScorchedVisuals or not self:IsScorchedVisual(instance) then
+            return
+        end
+
+        local state = self.ScorchedStates[instance]
+        if not state then
+            state = {
+                Enabled = instance.Enabled,
+                Connections = {},
+            }
+            self.ScorchedStates[instance] = state
+
+            table.insert(state.Connections, instance:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if self.RemoveScorchedVisuals
+                    and self.ScorchedStates[instance] == state
+                    and instance.Parent
+                    and instance.Enabled then
+                    instance.Enabled = false
+                end
+            end))
+        end
+
+        instance.Enabled = false
+    end
+
+    function controller:RefreshScorchedVisuals()
+        if self.RemoveScorchedVisuals then
+            for _, descendant in ipairs(workspace:GetDescendants()) do
+                self:SuppressScorchedVisual(descendant)
+            end
+            return
+        end
+
+        local visuals = {}
+        for instance in pairs(self.ScorchedStates) do
+            table.insert(visuals, instance)
+        end
+        for _, instance in ipairs(visuals) do
+            self:RestoreScorchedVisual(instance)
+        end
+    end
+
+    function controller:IsLowPolyTarget(instance)
+        return instance:IsA("MeshPart")
+    end
+
+    function controller:ApplyLowPoly(instance)
+        if not self.LowPoly or not self:IsLowPolyTarget(instance) then
+            return
+        end
+
+        if self.LowPolyStates[instance] == nil then
+            self.LowPolyStates[instance] = instance.RenderFidelity
+        end
+
+        pcall(function()
+            instance.RenderFidelity = Enum.RenderFidelity.Performance
+        end)
+    end
+
+    function controller:RestoreLowPoly(instance)
+        local renderFidelity = self.LowPolyStates[instance]
+        if renderFidelity == nil then
+            return
+        end
+
+        self.LowPolyStates[instance] = nil
+        if instance.Parent then
+            pcall(function()
+                instance.RenderFidelity = renderFidelity
+            end)
+        end
+    end
+
+    function controller:RefreshLowPoly()
+        if self.LowPoly then
+            local processed = 0
+            for _, descendant in ipairs(workspace:GetDescendants()) do
+                if not self.LowPoly or self.Destroyed then
+                    return
+                end
+                if self:IsLowPolyTarget(descendant) then
+                    self:ApplyLowPoly(descendant)
+                    processed += 1
+                    if processed % 300 == 0 then
+                        task.wait()
+                    end
+                end
+            end
+            return
+        end
+
+        local instances = {}
+        for instance in pairs(self.LowPolyStates) do
+            table.insert(instances, instance)
+        end
+        for index, instance in ipairs(instances) do
+            self:RestoreLowPoly(instance)
+            if index % 300 == 0 then
+                task.wait()
+            end
+        end
+    end
+
+    function controller:DestroyCadenceVisual(instrument)
+        local visual = self.CadenceVisuals[instrument]
+        if not visual then
+            return
+        end
+
+        if visual.ChamFill then
+            visual.ChamFill:Destroy()
+        end
+        if visual.ChamOutline then
+            visual.ChamOutline:Destroy()
+        end
+        if visual.Arrow then
+            visual.Arrow:Destroy()
+        end
+        if visual.Line then
+            visual.Line:Destroy()
+        end
+        self.CadenceVisuals[instrument] = nil
+    end
+
+    function controller:GetCadenceVisual(instrument)
+        local visual = self.CadenceVisuals[instrument]
+        if visual then
+            return visual
+        end
+
+        visual = {
+            ChamFill = Instance.new("BoxHandleAdornment"),
+            ChamOutline = Instance.new("BoxHandleAdornment"),
+            Arrow = Drawing.new("Triangle"),
+            Line = Drawing.new("Line"),
+        }
+        visual.ChamOutline.Name = "NULLGUICadenceChamOutline"
+        visual.ChamOutline.Adornee = instrument
+        visual.ChamOutline.AlwaysOnTop = true
+        visual.ChamOutline.ZIndex = 0
+        visual.ChamOutline.Parent = instrument
+        visual.ChamFill.Name = "NULLGUICadenceChamFill"
+        visual.ChamFill.Adornee = instrument
+        visual.ChamFill.AlwaysOnTop = true
+        visual.ChamFill.ZIndex = 1
+        visual.ChamFill.Parent = instrument
+        visual.Arrow.Filled = true
+        visual.Line.Thickness = 2
+        self.CadenceVisuals[instrument] = visual
+        return visual
+    end
+
+    function controller:RefreshCadenceEsp()
+        if self.Destroyed then
+            return
+        end
+
+        local cadence = enemies:FindFirstChild("Cadence")
+        local camera = workspace.CurrentCamera
+        local settings = self.Cadence
+        local enabled = settings.Cham or settings.Arrow or settings.Line
+        local chamFillOpacity = math.clamp(settings.ChamFillOpacity, 0, 100) / 100
+        local chamOutlineOpacity = math.clamp(settings.ChamOutlineOpacity, 0, 100) / 100
+        local arrowOpacity = math.clamp(settings.ArrowOpacity, 0, 100) / 100
+        local lineOpacity = math.clamp(settings.LineOpacity, 0, 100) / 100
+        local activeInstruments = {}
+
+        if cadence and camera and enabled then
+            for _, instrument in ipairs(cadence:GetChildren()) do
+                if instrument.Name == "ClonedOrb"
+                    and instrument:IsA("BasePart")
+                    and instrument.Parent then
+                    activeInstruments[instrument] = true
+                    local visual = self:GetCadenceVisual(instrument)
+                    visual.ChamFill.Visible = settings.Cham
+                    visual.ChamFill.Size = instrument.Size
+                    visual.ChamFill.Color3 = settings.ChamFillColor
+                    visual.ChamFill.Transparency = 1 - chamFillOpacity
+                    visual.ChamOutline.Visible = settings.Cham
+                    visual.ChamOutline.Size = instrument.Size + Vector3.new(0.35, 0.35, 0.35)
+                    visual.ChamOutline.Color3 = settings.ChamOutlineColor
+                    visual.ChamOutline.Transparency = 1 - chamOutlineOpacity
+
+                    local screenPosition, onScreen = camera:WorldToViewportPoint(instrument.Position)
+                    onScreen = onScreen and screenPosition.Z > 0
+                    local viewport = camera.ViewportSize
+                    local center = Vector2.new(viewport.X / 2, viewport.Y / 2)
+                    local target = Vector2.new(screenPosition.X, screenPosition.Y)
+
+                    visual.Line.Visible = settings.Line and onScreen
+                    visual.Line.From = center
+                    visual.Line.To = target
+                    visual.Line.Color = settings.LineColor
+                    visual.Line.Transparency = lineOpacity
+
+                    visual.Arrow.Visible = settings.Arrow and onScreen
+                    visual.Arrow.Color = settings.ArrowColor
+                    visual.Arrow.Transparency = arrowOpacity
+                    local of
