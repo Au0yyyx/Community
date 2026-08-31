@@ -736,7 +736,9 @@ local function sprintState(tracker, humanoid, actorState, now)
                 if track.WeightCurrent > 0.15 and configuredName then
                     tracker.ActiveAnimations[configuredName] = true
                 end
-                if track.WeightCurrent > 0.15 and name:find("enraged", 1, true) then
+                if track.WeightCurrent > 0.15 and (name:find("enraged", 1, true)
+                    or (configuredName and (configuredName:find("enraged", 1, true)
+                        or configuredName:find("raging", 1, true)))) then
                     tracker.EnragedAnimation = true
                 end
                 if track.WeightCurrent > 0.15
@@ -847,6 +849,10 @@ connect(RunService.Heartbeat, function(dt)
             t.LastPosition = position
             t.SmoothedSpeed += (rawSpeed - t.SmoothedSpeed) * math.clamp(dt * 12, 0, 1)
             local state, actor = actorStateFor(model)
+            -- Refresh animation evidence before reading EnragedAnimation. The
+            -- old order used the previous 0.1s sample and could drain one or
+            -- more frames when Raging Pace began.
+            local detectedSprint = sprintState(t, humanoidOf(model), state, now)
             local enraged = t.Stats.EnragedCap ~= nil
                 and ((state and state.isEnraged == true) or t.EnragedAnimation)
             if enraged and not t.Enraged then t.EnragedSince = now end
@@ -858,7 +864,7 @@ connect(RunService.Heartbeat, function(dt)
             end
             -- Raging Pace disables sprinting. Its fixed EnragedSpeed must never
             -- be mistaken for normal stamina drain.
-            local sprinting = not enraged and sprintState(t, humanoidOf(model), state, now)
+            local sprinting = not enraged and detectedSprint
             if sprinting then
                 t.LastSprintEvidence = now
             elseif t.SprintAnimation then
@@ -891,7 +897,12 @@ connect(RunService.Heartbeat, function(dt)
                 t.Estimate = math.min(staminaCap, t.Estimate + effectiveGain * dt)
             end
             t.WasSprinting = draining
-            t.Estimate = math.min(t.Estimate, staminaCap)
+            -- Raging Pace only assigns Sprinting.StaminaCap. It does NOT write
+            -- Sprinting.Stamina, and sprinting is disabled for the duration.
+            -- Therefore lowering the cap must not lower the current estimate.
+            if not enraged then
+                t.Estimate = math.min(t.Estimate, staminaCap)
+            end
             local ratio = math.clamp(t.Estimate / t.Stats.Max, 0, 1)
             t.Fill.Size = UDim2.fromScale(ratio, 1)
             t.Fill.BackgroundColor3 = Color3.fromHSV(ratio * 0.33, 0.78, 0.95)
