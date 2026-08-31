@@ -130,13 +130,13 @@ local function calculate()
 end
 
 local gui=Instance.new("ScreenGui");gui.Name="NullscapeShopAI";gui.ResetOnSpawn=false;gui.IgnoreGuiInset=true;gui.DisplayOrder=99999;gui.Parent=(gethui and gethui())or CoreGui
-local f=Instance.new("Frame");f.Size=UDim2.fromOffset(520,360);f.Position=UDim2.new(1,-535,.5,-180);f.BackgroundColor3=Color3.fromRGB(10,13,20);f.BackgroundTransparency=.05;f.BorderSizePixel=0;f.Active=true;f.Draggable=true;f.Parent=gui;Instance.new("UICorner",f).CornerRadius=UDim.new(0,10)
+local f=Instance.new("Frame");f.Size=UDim2.fromOffset(390,255);f.Position=UDim2.new(1,-405,.5,-128);f.BackgroundColor3=Color3.fromRGB(10,13,20);f.BackgroundTransparency=.08;f.BorderSizePixel=0;f.Active=true;f.Draggable=true;f.Parent=gui;Instance.new("UICorner",f).CornerRadius=UDim.new(0,10);App.Frame=f;App.Gui=gui
 local st=Instance.new("UIStroke",f);st.Color=Color3.fromRGB(94,215,255);st.Thickness=2
 local function text(y,h,size,color,font)local l=Instance.new("TextLabel");l.BackgroundTransparency=1;l.Position=UDim2.fromOffset(14,y);l.Size=UDim2.new(1,-28,0,h);l.Font=font or Enum.Font.Code;l.TextSize=size;l.TextColor3=color;l.TextWrapped=true;l.TextXAlignment=Enum.TextXAlignment.Left;l.TextYAlignment=Enum.TextYAlignment.Top;l.Parent=f;return l end
-local title=text(10,28,19,Color3.fromRGB(110,225,255),Enum.Font.GothamBold);title.Text="NULLSCAPE // SHOP CALCULATOR AI"
-local partyButton=Instance.new("TextButton");partyButton.Size=UDim2.fromOffset(112,25);partyButton.Position=UDim2.new(1,-124,0,8);partyButton.BackgroundColor3=Color3.fromRGB(24,43,57);partyButton.TextColor3=Color3.fromRGB(135,230,255);partyButton.Font=Enum.Font.GothamBold;partyButton.TextSize=11;partyButton.Text="PARTY: AUTO";partyButton.Parent=f;Instance.new("UICorner",partyButton).CornerRadius=UDim.new(0,6)
-local stats=text(42,24,13,Color3.fromRGB(205,215,230));local best=text(75,98,15,Color3.fromRGB(125,255,160),Enum.Font.GothamBold)
-local ranked=text(178,155,13,Color3.fromRGB(235,235,245));local foot=text(336,18,11,Color3.fromRGB(145,155,175));foot.Text="RightShift hide • live data from Sticks' calculator • recommendations only"
+local title=text(8,24,15,Color3.fromRGB(110,225,255),Enum.Font.GothamBold);title.Text="NULLSCAPE // SHOP AI"
+local partyButton=Instance.new("TextButton");partyButton.Size=UDim2.fromOffset(105,22);partyButton.Position=UDim2.new(1,-113,0,7);partyButton.BackgroundColor3=Color3.fromRGB(24,43,57);partyButton.TextColor3=Color3.fromRGB(135,230,255);partyButton.Font=Enum.Font.GothamBold;partyButton.TextSize=10;partyButton.Text="PARTY: AUTO";partyButton.Parent=f;Instance.new("UICorner",partyButton).CornerRadius=UDim.new(0,6)
+local stats=text(36,20,11,Color3.fromRGB(205,215,230));local best=text(62,60,12,Color3.fromRGB(125,255,160),Enum.Font.GothamBold)
+local ranked=text(124,106,11,Color3.fromRGB(235,235,245));local foot=text(234,15,9,Color3.fromRGB(145,155,175));foot.Text="RightShift hide • Sticks calculator data"
 local hidden=false;local function con(sig,fn)local c=sig:Connect(fn);App.Connections[#App.Connections+1]=c;return c end
 local partyModes={false,"solo","duo","party","party-plus"};local partyModeIndex=1
 con(partyButton.MouseButton1Click,function()partyModeIndex=partyModeIndex%#partyModes+1;App.PartyOverride=partyModes[partyModeIndex]or nil;partyButton.Text="PARTY: "..(App.PartyOverride and App.PartyOverride:upper()or "AUTO")end)
@@ -145,8 +145,8 @@ task.spawn(function()while not App.Destroyed do local s,choices,basket,spent=cal
  stats.Text=string.format("LEVEL %d  •  %d PLAYER(S)  •  %s/%s  •  %.0f GG%s",s.level,s.players,s.difficulty,s.party,s.money,s.nothing and "  •  NOTHING? -15%"or "")
  local names={};for _,it in ipairs(basket.list)do names[#names+1]=string.format("%s %s(%d)",it.u.name,it.stack>1 and("x"..it.stack.." ")or "",it.cost)end
  best.Text=#names>0 and("BEST BASKET — "..spent.." GG\n"..table.concat(names,"  +  "))or "BEST BASKET\nSave your Golden Gifts — nothing eligible is worth buying yet."
- local lines={"BEST INDIVIDUAL OPTIONS"};for i=1,math.min(7,#choices)do local it=choices[i];lines[#lines+1]=string.format("%d. %s%s — %d GG  [%d/100]",i,it.u.name,it.stack>1 and(" (stack "..it.stack..")")or "",it.cost,math.floor(it.score+.5))end
- ranked.Text=table.concat(lines,"\n");task.wait(.5)end end)
+ local lines={"BEST INDIVIDUAL OPTIONS"};for i=1,math.min(4,#choices)do local it=choices[i];lines[#lines+1]=string.format("%d. %s%s — %d GG  [%d]",i,it.u.name,it.stack>1 and(" (stack "..it.stack..")")or "",it.cost,math.floor(it.score+.5))end
+ ranked.Text=table.concat(lines,"\n");App.Snapshot={Settings=stats.Text,Best=best.Text,Ranked=ranked.Text,Party=s.party};task.wait(.5)end end)
 function App:Destroy()if self.Destroyed then return end;self.Destroyed=true;for _,c in ipairs(self.Connections)do pcall(function()c:Disconnect()end)end;gui:Destroy();if Env[KEY]==self then Env[KEY]=nil end end
 print("[Nullscape Shop AI] Loaded")
 
