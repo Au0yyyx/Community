@@ -1,0 +1,1247 @@
+table.insert(connections, goldengifts.ChildRemoved:Connect(updateGiftLists))
+
+updateGiftLists()
+
+local function refreshGifts(skip, golden)
+    local currentAvailableGifts = #availableNormalGifts
+    if #availableNormalGifts == 0 or golden then
+        currentAvailableGifts = #availableGoldenGifts
+    end
+    local REFRESH_RATE = (currentAvailableGifts > 5000 and 1/0.25) or (currentAvailableGifts > 3000 and 1/1) or (currentAvailableGifts > 1500 and 1/3) or (currentAvailableGifts > 1000 and 1/5) or (currentAvailableGifts > 500 and 1/12.5) or 1/25
+
+    if not skip then
+        if tick() - lastRefresh < REFRESH_RATE then return end
+        lastRefresh = tick()
+    end
+
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return end
+
+    local rootPos = root.Position
+
+    for i = 1, SCAN_SIZE do
+        local gift = normalList[scanIndex]
+        if not gift then
+            scanIndex = 1
+            break
+        end
+
+        if gift.Transparency ~= 1 and gift:FindFirstChild("Collect", true) then
+            local dist = (rootPos - gift.Position).Magnitude
+
+            if dist <= 500 then
+                availableNormalGifts[#availableNormalGifts+1] = gift
+            end
+        end
+
+        scanIndex += 1
+    end
+
+    for i = 1, SCAN_SIZE do
+        local gift = goldenList[scanIndexTwo]
+        if not gift then
+            scanIndexTwo = 1
+            break
+        end
+
+        if gift.Transparency ~= 1 and gift:FindFirstChild("Collect", true) then
+            local dist = (rootPos - gift.Position).Magnitude
+
+            if dist <= 500 then
+                availableGoldenGifts[#availableGoldenGifts+1] = gift
+            end
+        end
+
+        scanIndexTwo += 1
+    end
+end
+
+local function getActiveTripmines()
+    local active = {}
+    for _, mine in tripmines:GetChildren() do
+        if mine.Transparency ~= 1 then
+            table.insert(active, mine)
+        end
+    end
+    if goldentripmines then
+        for _, mine in goldentripmines:GetChildren() do
+            if mine.Transparency ~= 1 then
+                table.insert(active, mine)
+            end
+        end
+    end
+    return active
+end
+
+local function pathBlocked(targetPos, activeTripmines, activeEnemies)
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return true end
+
+    local rootPos = root.Position
+    local fakeSize = Vector3.new(2,5,2)
+    
+    local minX = math.min(rootPos.X - fakeSize.X/2, targetPos.X - fakeSize.X/2)
+    local minY = math.min(rootPos.Y - fakeSize.Y/2, targetPos.Y - fakeSize.Y/2)
+    local minZ = math.min(rootPos.Z - fakeSize.Z/2, targetPos.Z - fakeSize.Z/2)
+    local maxX = math.max(rootPos.X + fakeSize.X/2, targetPos.X + fakeSize.X/2)
+    local maxY = math.max(rootPos.Y + fakeSize.Y/2, targetPos.Y + fakeSize.Y/2)
+    local maxZ = math.max(rootPos.Z + fakeSize.Z/2, targetPos.Z + fakeSize.Z/2)
+
+    for _, mine in activeTripmines do
+        local pos = mine.Position
+        local size = mine.Size
+        local minMx, maxMx = pos.X - size.X/2, pos.X + size.X/2
+        local minMy, maxMy = pos.Y - size.Y/2, pos.Y + size.Y/2
+        local minMz, maxMz = pos.Z - size.Z/2, pos.Z + size.Z/2
+
+        local overlapX = maxX >= minMx and minX <= maxMx
+        local overlapY = maxY >= minMy and minY <= maxMy
+        local overlapZ = maxZ >= minMz and minZ <= maxMz
+
+        if overlapX and overlapY and overlapZ then
+            return true
+        end
+    end
+    for _, enemy in activeEnemies do
+        local pos = enemy.Position
+        local size = enemy.Size
+        local minMx, maxMx = pos.X - size.X/2, pos.X + size.X/2
+        local minMy, maxMy = pos.Y - size.Y/2, pos.Y + size.Y/2
+        local minMz, maxMz = pos.Z - size.Z/2, pos.Z + size.Z/2
+
+        local overlapX = maxX >= minMx and minX <= maxMx
+        local overlapY = maxY >= minMy and minY <= maxMy
+        local overlapZ = maxZ >= minMz and minZ <= maxMz
+
+        if overlapX and overlapY and overlapZ then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getClosestGift(giftList)
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return end
+
+    local rootPos = root.Position
+    local closest, shortest = nil, math.huge
+
+    for _, gift in ipairs(giftList) do
+        if gift and gift.Transparency == 0 and gift:FindFirstChild("Collect", true) then 
+            local diff = gift.Position - rootPos
+            local dist = diff.Magnitude
+
+            if dist < shortest then
+                shortest = dist
+                closest = gift
+            end
+        end
+    end
+
+    return closest, shortest
+end
+
+local function protectTripmine(trip)
+    if not trip:GetAttribute("uuid") then
+        trip:SetAttribute("uuid", HttpService:GenerateGUID(false))
+    end
+
+    local id = trip:GetAttribute("uuid")
+
+    if tripmineprots:FindFirstChild(id) then return end
+
+    local startPos = trip.Position
+
+    local sizeoffset = trip.Size.X + 3
+
+    local p = Instance.new("Part")
+    p.Name = id
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(sizeoffset, sizeoffset, sizeoffset)
+    p.Position = startPos
+    p.Anchored = true
+    p.CanCollide = true
+    p.Transparency = 0
+    p.Parent = tripmineprots
+
+    trip:GetPropertyChangedSignal("Transparency"):Once(function()
+        p:Destroy()
+    end)
+end
+
+local function protectBullet(b)
+    if not b:GetAttribute("uuid") then
+        b:SetAttribute("uuid", HttpService:GenerateGUID(false))
+    end
+
+    local id = b:GetAttribute("uuid")
+
+    if bulletprots:FindFirstChild(id) then return end
+
+    local startPos = b.Position
+
+    local sizeoffset = b.Size.X + 5
+
+    local p = Instance.new("Part")
+    p.Name = id
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(sizeoffset, sizeoffset, sizeoffset)
+    p.Position = startPos
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Transparency = 0.35
+    p.Parent = bulletprots
+
+    b:GetPropertyChangedSignal("Transparency"):Once(function()
+        p:Destroy()
+    end)
+end
+
+local function goTo(part, activeTripmines, activeEnemies)
+    if not activeEnemies then activeEnemies = enemies:GetChildren() end
+    if not part then return end
+    local char = getChar(plr)
+    local root, hitbox = getRoot(char)
+    local rootPos = root and root.Position
+    if not root or not hitbox then return end
+
+    local pos = part:IsA("Model") and part:GetPivot().Position or part.Position
+    if part.Name == "Spawn" then pos += Vector3.new(0,4,0) end
+    local diff = pos - rootPos
+    local dist = diff.Magnitude
+    if dist == 0 or dist >= 10000 then return end
+
+    local direction = diff.Unit
+    root.CFrame = CFrame.new(root.Position, root.Position + direction) * CFrame.Angles(0, math.rad(90), 0)
+
+    local blocked = pathBlocked(pos, activeTripmines, activeEnemies)
+    if blocked and (part.Name == "Gift" or part.Name == "GoldenGift") then
+        root.Position = pos
+        task.wait(.3)
+        return
+    end
+
+    local info = TweenInfo.new(dist / 120, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+    local tween = TweenService:Create(root, info, {Position = pos})
+    tween:Play()
+    TweenService:Create(hitbox, info, {Position = pos}):Play()
+
+    task.spawn(function()
+        while tween.PlaybackState == Enum.PlaybackState.Playing do
+            if pathBlocked(pos, activeTripmines, activeEnemies) then
+                tween:Cancel()
+                break
+            end
+            task.wait(0.05)
+        end
+    end)
+    tween.Completed:Once(function()
+        hitbox.Position = root.Position
+    end)
+
+    return tween
+end
+
+
+
+local function getAltarPrompts()
+    local prompts = {}
+    for _, p in currentRooms:GetDescendants() do
+        if p.Name == "Prompt" and p:IsA("ProximityPrompt") then
+            table.insert(prompts, {
+                Prompt = p,
+                Text = p.ObjectText
+            })
+        end
+    end
+
+    return prompts
+end
+
+local function disableEnemy(enemyName, willDestroy, willBreakAI, failNotif)
+    if failNotif == nil then
+        failNotif = true
+    end
+    if willBreakAI == nil then
+        willBreakAI = false
+    end
+
+    local function loopEnemies(name, remove, list)
+        list = list or enemies
+        remove = remove or "TouchInterest"
+
+        local n = 0
+        local total = 0
+        local enemiesFound = {}
+
+        for _, sameenemy in list:GetChildren() do
+            if sameenemy.Name ~= name then
+                continue
+            end
+
+            local loaded = sameenemy:FindFirstChild(remove, true) or sameenemy:FindFirstChild(name.."_ClientAI", true) or sameenemy:GetAttribute("Disabled") == true
+            
+            if not loaded then
+                continue
+            end
+
+            total += 1
+            table.insert(enemiesFound, sameenemy)
+
+            if sameenemy:GetAttribute("Disabled") == true then
+                n += 1
+                continue
+            end
+
+            local disabledThisEnemy = false
+
+            for _, part in sameenemy:GetDescendants() do
+                if part.Name == remove then
+                    part:Destroy()
+                    disabledThisEnemy = true
+                end
+            end
+
+            if disabledThisEnemy then
+                sameenemy:SetAttribute("Disabled", true)
+                n += 1
+            end
+        end
+
+        return n, total, enemiesFound
+    end
+
+    local function destroyEnemy(name, list)
+        list = list or enemies
+
+        for _, sameenemy in list:GetChildren() do
+            if sameenemy.Name == name then
+                sameenemy:Destroy()
+            end
+        end
+
+        if notifOn then
+            notif(name.." disabled. (destroyed)", "Enemy")
+        end
+
+        return true
+    end
+
+    local function disableClientAIEnemy(name, clientScriptName)
+        local total = 0
+        local disabled = 0
+
+        for _, enemy in ipairs(enemies:GetChildren()) do
+            if enemy.Name == name then
+                total += 1
+
+                if enemy:GetAttribute("Disabled") == true then
+                    disabled += 1
+                    continue
+                end
+
+                local clientScript = enemy:FindFirstChild(clientScriptName, true)
+                if clientScript then
+                    clientScript.Enabled = false
+                    enemy:SetAttribute("Disabled", true)
+                    disabled += 1
+
+                    local enabledGuard
+                    enabledGuard = clientScript:GetPropertyChangedSignal("Enabled"):Connect(function()
+                        if not clientScript.Parent or not enemy.Parent then
+                            enabledGuard:Disconnect()
+                            return
+                        end
+
+                        if clientScript.Enabled then
+                            clientScript.Enabled = false
+                        end
+                    end)
+                    table.insert(connections, enabledGuard)
+                end
+            end
+        end
+
+        return total > 0 and disabled >= total
+    end
+
+    local disableFunction = {
+        Basic = function(name, willDestroy, willBreakAI)
+            if not name then return end
+
+            if willDestroy then
+                return destroyEnemy(name)
+            end
+
+            local n, total, enemiesFound = loopEnemies(name)
+
+            if total > 0 and n >= total then
+                if notifOn then
+                    notif(tostring(n).." "..name.."(s) disabled.", "Enemy")
+                end
+
+                if willBreakAI then
+                    for _, e in pairs(enemiesFound) do
+                        local clientScript = e:FindFirstChild(name.."_ClientAI")
+
+                        if clientScript then
+                            clientScript.Enabled = false
+                        end
+                    end
+                end
+
+                return true
+            else
+                if failNotif == true and notifOn then
+                    notif(name.." cannot be fully disabled yet.", "Enemy")
+                end
+
+                return false
+            end
+        end,
+
+        Guardian = function(name, willDestroy)
+            if willDestroy then
+                return destroyEnemy(name)
+            end
+
+            if disableClientAIEnemy(name, "Guardian_ClientAI") then
+                if notifOn then
+                    notif("Guardian disabled.", "Enemy")
+                end
+                return true
+            end
+
+            return false
+        end,
+
+        ShadowGuardian = function(name, willDestroy)
+            if willDestroy then
+                return destroyEnemy(name)
+            end
+
+            if disableClientAIEnemy(name, "ShadowGuardian_ClientAI") then
+                if notifOn then
+                    notif("Voidbound Guardian disabled.", "Enemy")
+                end
+                return true
+            end
+
+            return false
+        end,
+
+        RealityBreak = function(name, willDestroy)
+            if willDestroy then
+                return destroyEnemy(name)
+            end
+
+            if disableClientAIEnemy(name, "RealityBreak_ClientAI") then
+                if notifOn then
+                    notif("Reality Break disabled.", "Enemy")
+                end
+                return true
+            end
+
+            return false
+        end,
+
+        Skinwalker = function(name, willDestroy, willBreakAI)
+            local skinwalkers = workspace.Skinwalkers
+
+            if #skinwalkers:GetChildren() == 0 then
+                if failNotif == true and notifOn then
+                    notif("Husk isn't following you yet.", "Enemy")
+                end
+                return false
+            end
+
+            if willDestroy then
+				destroyEnemy(name)
+                return destroyEnemy(name, skinwalkers)
+            end
+
+            local n = 0
+            local total = 0
+
+            local a,b = loopEnemies("Skinwalker", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("TallSkinwalker", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("Skinwalker1", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("Skinwalker2", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("Skinwalker3", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("Skinwalker4", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("CrayonSkinwalker", "TouchInterest", skinwalkers); n += a total += b
+            a,b = loopEnemies("TallCrayonSkinwalker", "TouchInterest", skinwalkers); n += a total += b
+
+            if total > 0 and n >= total then
+                if notifOn then
+                    notif(tostring(n).." Husk(s) disabled.", "Enemy")
+                end
+                return true
+            end
+
+            return false
+        end,
+
+        Springer = function(name, willDestroy, willBreakAI)
+            if not willDestroy then
+                loopEnemies(name, "SpringerShockwave")
+                loopEnemies(name, "DemonShockwave")
+                local n, total, enemiesFound = loopEnemies(name, "Kill")
+
+                if total > 0 and n >= total then
+                    if notifOn then
+                        notif(tostring(n).." Springer(s) disabled.", "Enemy")
+                    end
+
+                    if willBreakAI then
+                        for _, s in pairs(enemiesFound) do
+                            local clientScript = s:FindFirstChild("Springer_ClientAI")
+
+                            if clientScript then
+                                if clientScript.Enabled == false and not s:GetAttribute("Disabled") then
+                                    local c
+                                    c = clientScript:GetPropertyChangedSignal("Enabled"):Connect(function()
+                                        if not clientScript.Parent or not s.Parent then
+                                            c:Disconnect()
+                                            return
+                                        end
+
+                                        if clientScript.Enabled == true then
+                                            task.defer(function()
+                                                if clientScript.Parent and s.Parent then
+                                                    clientScript.Enabled = false
+                                                end
+                                            end)
+
+                                            c:Disconnect()
+                                        end
+                                    end)
+                                end
+                                
+                                clientScript.Enabled = false
+                                s:SetAttribute("Disabled", true)
+                                n += 1
+                            end
+                        end
+                    end
+
+                    return true
+                end
+
+                return false
+            else
+                return destroyEnemy(name)
+            end
+        end,
+
+        ICBM = function(name, willDestroy, willBreakAI)
+            if not willDestroy then
+                local enemiesFound = {}
+
+                for _, e in enemies:GetChildren() do
+                    if e.Name == name or e.Name == "ICBM" then
+                        table.insert(enemiesFound, e)
+                    end
+                end
+
+                if #enemiesFound > 0 then
+                    local n = 0
+
+                    for _, s in pairs(enemiesFound) do
+                        local clientScript = s:FindFirstChild("ICBM_ClientAI")
+
+                        if clientScript then
+                            if clientScript.Enabled == false and not s:GetAttribute("Disabled") then
+                                local c
+                                c = clientScript:GetPropertyChangedSignal("Enabled"):Connect(function()
+                                    if not clientScript.Parent or not s.Parent then
+                                        c:Disconnect()
+                                        return
+                                    end
+
+                                    if clientScript.Enabled == true then
+                                        task.defer(function()
+                                            if clientScript.Parent and s.Parent then
+                                                clientScript.Enabled = false
+                                            end
+                                        end)
+
+                                        c:Disconnect()
+                                    end
+                                end)
+                            end
+
+                            clientScript.Enabled = false
+                            s:SetAttribute("Disabled", true)
+                            n += 1
+                        end
+                    end
+
+                    return n >= #enemiesFound
+                end
+
+                return false
+            else
+                return destroyEnemy(name)
+            end
+        end,
+
+        Celestial = function(name, willDestroy, willBreakAI)
+            if willDestroy then
+                return destroyEnemy(name)
+            end
+            local n, total, enemiesFound = loopEnemies(name)
+
+            if n > 0 then
+                if notifOn then
+                    notif("Celestial disabled. Go Collect.")
+                end
+
+                if #enemiesFound > 0 then
+                    for _, s in pairs(enemiesFound) do
+                        local clientScript = s:FindFirstChild("Celestial_ClientAI")
+
+                        if clientScript then
+                            if clientScript.Enabled == false then
+                                local c
+                                c = clientScript:GetPropertyChangedSignal("Enabled"):Connect(function()
+                                    if not clientScript.Parent or not s.Parent then
+                                        c:Disconnect()
+                                        return
+                                    end
+
+                                    if clientScript.Enabled == true then
+                                        task.defer(function()
+                                            if clientScript.Parent and s.Parent then
+                                                clientScript.Enabled = false
+                                            end
+                                        end)
+
+                                        c:Disconnect()
+                                    end
+                                end)
+                            end
+
+                            clientScript.Enabled = false
+                            s:SetAttribute("Disabled", true)
+                            n += 1
+                        end
+                    end
+                end
+                return true
+            else
+                return false
+            end
+        end,
+
+        Sigil = function(name) return destroyEnemy(name) end,
+        Kolona = function(name) return destroyEnemy(name) end,
+        Operator = function(name) return destroyEnemy(name) end,
+        Voidbreaker = function(name) return destroyEnemy(name) end,
+        Scrapmaw = function(name) return destroyEnemy(name) end
+    }
+
+    print("disabling:", enemyName, "(NULL GUI)")
+
+    if disableFunction[enemyName] then
+        return disableFunction[enemyName](enemyName, willDestroy, willBreakAI)
+    else
+        return disableFunction.Basic(enemyName, willDestroy, willBreakAI)
+    end
+end
+
+local function GetClosestPad()
+    local localChar = getChar(plr)
+    if not localChar then return nil end
+
+    local root,hitbox = getRoot(localChar)
+    if not root then return nil end
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {localChar}
+
+    local badColor = Color3.fromRGB(152, 24, 24)
+    local closest = nil
+    local dist = 100
+
+    for _, part in pads:GetChildren() do
+        if part.Color == badColor then print("bad color (NULL GUI)") continue end
+        local mag = (root.Position - part.Position).Magnitude
+        if mag > dist then print(mag, ">", dist, "part too far (NULL GUI)") continue end
+
+        local origin = root.Position
+        local direction = part.Position - origin
+
+        local result = workspace:Raycast(origin, direction, rayParams)
+        local visible = false
+
+        if result then
+            local hit = result.Instance
+            if hit:IsDescendantOf(pads) then
+                visible = true
+            else
+                visible = false
+            end
+        end
+
+        if visible then
+            dist = mag
+            closest = part
+        end
+    end
+
+    return closest
+end
+
+local function getSeamines()
+    local seamines = {}
+
+    for _, sm in pads:GetChildren() do
+        if sm.Name == "Seamine" then
+            table.insert(seamines, sm)
+        end
+    end
+
+    return seamines
+end
+
+local function isdirectionsafetopushfromguardianbullet(pos, direction)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.FilterDescendantsInstances = {game.Players.LocalPlayer.Character}
+
+    local result = workspace:Raycast(pos, direction * 6, rayParams)
+    return result ~= nil and result.Instance and result.Instance.CanCollide == true
+end
+
+---------------------collection
+local function collect(which, suppressNotFound)
+    local activeTripmines = getActiveTripmines()
+    if magSlider then
+        magSlider:Set(5)
+    end
+
+    local function collectGolden()
+        if tweening then
+            if notifOn then
+                notif("Already collecting.", "Collection System")
+            end
+            return
+        end
+        tweening = true
+        local startRefreshing
+        local tween:Tween
+
+        while tweening do
+            if suppressNotFound then
+                local inRound = ReplicatedStorage:FindFirstChild("InRound")
+                if not inRound or not inRound.Value then
+                    break
+                end
+            end
+
+            local char = getChar(plr)
+            local root = getRoot(char)
+            if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+
+            if not startRefreshing then
+                refreshGifts(true, true)
+            elseif tick() - startRefreshing >= 15 then
+                startRefreshing = tick()
+                refreshGifts(true, true)
+            end
+
+            local gift = getClosestGift(availableGoldenGifts)
+            if not gift then
+                if notifOn and not suppressNotFound then
+                    notif("no golden gifts, or currently finding golden gifts", "Gift Not Found")
+                end
+                break
+            end
+            if not startRefreshing then
+                startRefreshing = tick()
+            end
+
+            tween = goTo(gift, activeTripmines, enemies:GetChildren())
+            if tween then tween.Completed:Wait() end
+
+            task.wait(.01)
+        end
+        if tween then
+            tween:Cancel()
+        end
+        tweening = false
+    end
+
+    local function collectNormal(getGoldenAfter)
+        if tweening then
+            if notifOn then
+                notif("Already collecting.", "Collection System")
+            end
+            return
+        end
+        tweening = true
+        local startRefreshing
+        local tween:Tween
+
+        while tweening do
+            if suppressNotFound then
+                local inRound = ReplicatedStorage:FindFirstChild("InRound")
+                if not inRound or not inRound.Value then
+                    break
+                end
+            end
+
+            local char = getChar(plr)
+            local root = getRoot(char)
+            if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+
+            if not startRefreshing then
+                refreshGifts(true, false)
+            elseif tick() - startRefreshing >= 15 then
+                startRefreshing = tick()
+                refreshGifts(true, false)
+            end
+
+            local gift = getClosestGift(availableNormalGifts)
+            if not gift then
+                if notifOn and not suppressNotFound then
+                    notif("no gifts, or currently finding gifts", "Gift Not Found")
+                end
+                break
+            end
+            if not startRefreshing then
+                startRefreshing = tick()
+            end
+
+            tween = goTo(gift, activeTripmines, enemies:GetChildren())
+            if tween then tween.Completed:Wait() end
+
+            task.wait(.01)
+        end
+        if tween then
+            tween:Cancel()
+        end
+        tweening = false
+        if getGoldenAfter then task.wait(3) collectGolden() end
+    end
+
+    if which == "normal" then
+        collectNormal()
+    elseif which == "golden" then
+        collectGolden()
+    end
+end
+
+(function()
+    local controller = {
+        Destroyed = false,
+        AutoNormal = false,
+        AutoGolden = false,
+        AutoBeacon = false,
+        AutoLobby = false,
+        ActiveCollection = nil,
+        CollectionTaskActive = false,
+        SawGoldenGift = false,
+        BeaconedForCurrentBatch = false,
+        LobbyBusy = false,
+        LastLobbyAttempt = 0
+    }
+
+    celestialIntegration.AutoFarmController = controller
+
+    function controller:ResetCandidates()
+        table.clear(availableNormalGifts)
+        table.clear(availableGoldenGifts)
+        scanIndex = 1
+        scanIndexTwo = 1
+    end
+
+    function controller:CompactCandidates(candidateList)
+        local seenGifts = {}
+
+        for candidateIndex = #candidateList, 1, -1 do
+            local gift = candidateList[candidateIndex]
+            local validGift = gift
+                and gift.Parent
+                and gift.Transparency ~= 1
+                and gift:FindFirstChild("Collect", true)
+
+            if not validGift or seenGifts[gift] then
+                table.remove(candidateList, candidateIndex)
+            else
+                seenGifts[gift] = true
+            end
+        end
+    end
+
+    function controller:TeleportToBeacon()
+        local beacon = workspace:FindFirstChild("Beacon")
+        local character = getChar(plr)
+        local root, hitbox = getRoot(character)
+        if not beacon or not root then
+            return false
+        end
+
+        local beaconPosition = beacon:IsA("Model") and beacon:GetPivot().Position or beacon.Position
+        local destination = CFrame.new(beaconPosition + Vector3.new(0, 4, 0))
+        root.CFrame = destination
+
+        if hitbox then
+            hitbox.CFrame = destination
+        end
+
+        return true
+    end
+
+    function controller:GetLobbyOptionCFrame(option)
+        return option:IsA("BasePart") and option.CFrame or option:GetPivot()
+    end
+
+    function controller:GetSortedLobbyOptions(selectFolder)
+        local options = {}
+
+        for _, option in ipairs(selectFolder:GetChildren()) do
+            local optionName = string.lower(option.Name)
+            local isRerollOption = optionName:find("reroll", 1, true) ~= nil
+
+            if not isRerollOption and option:FindFirstChildOfClass("ProximityPrompt", true) then
+                table.insert(options, option)
+            end
+        end
+
+        table.sort(options, function(leftOption, rightOption)
+            local leftCFrame = self:GetLobbyOptionCFrame(leftOption)
+            local rightCFrame = self:GetLobbyOptionCFrame(rightOption)
+            local leftOffset = spawnPart.CFrame:ToObjectSpace(leftCFrame).Position.X
+            local rightOffset = spawnPart.CFrame:ToObjectSpace(rightCFrame).Position.X
+            return leftOffset < rightOffset
+        end)
+
+        return options
+    end
+
+    function controller:ActivateLobbyOption(option, root)
+        local prompt = option and option:FindFirstChildOfClass("ProximityPrompt", true)
+        if not prompt or type(fireproximityprompt) ~= "function" then
+            return false
+        end
+
+        root.CFrame = self:GetLobbyOptionCFrame(option) + Vector3.new(0, 3, 0)
+        task.wait(0.3)
+        fireproximityprompt(prompt)
+        task.wait(0.7)
+        return true
+    end
+
+    function controller:RunLobbySelection()
+        if self.LobbyBusy or self.Destroyed then
+            return
+        end
+
+        self.LobbyBusy = true
+        self.LastLobbyAttempt = tick()
+
+        local selectionSucceeded, selectionError = pcall(function()
+            local selectFolder = workspace:FindFirstChild("Select")
+            local character = getChar(plr)
+            local root = getRoot(character)
+            if not selectFolder or not spawnPart or not root then
+                return
+            end
+
+            local options = self:GetSortedLobbyOptions(selectFolder)
+            if #options == 0 then
+                return
+            end
+
+            self:ActivateLobbyOption(options[#options], root)
+            options = self:GetSortedLobbyOptions(selectFolder)
+
+            table.sort(options, function(leftOption, rightOption)
+                local leftOffset = spawnPart.CFrame:ToObjectSpace(self:GetLobbyOptionCFrame(leftOption)).Position.X
+                local rightOffset = spawnPart.CFrame:ToObjectSpace(self:GetLobbyOptionCFrame(rightOption)).Position.X
+                return math.abs(leftOffset) < math.abs(rightOffset)
+            end)
+
+            if options[1] then
+                self:ActivateLobbyOption(options[1], root)
+            end
+
+            task.wait(1.3)
+        end)
+
+        self.LobbyBusy = false
+        if not selectionSucceeded then
+            warn("[NULLGUI Auto-Farm] Lobby selection failed: " .. tostring(selectionError))
+        end
+    end
+
+    function controller:StartCollection(collectionType)
+        if self.CollectionTaskActive or tweening or self.Destroyed then
+            return false
+        end
+
+        self.CollectionTaskActive = true
+        self.ActiveCollection = collectionType
+
+        task.spawn(function()
+            local collectionSucceeded, collectionError = pcall(function()
+                collect(collectionType, true)
+            end)
+
+            self.CollectionTaskActive = false
+            self.ActiveCollection = nil
+
+            if not collectionSucceeded then
+                warn("[NULLGUI Auto-Farm] Collection failed: " .. tostring(collectionError))
+                return
+            end
+
+            if collectionType == "golden"
+                and self.AutoBeacon
+                and self.SawGoldenGift
+                and not self.BeaconedForCurrentBatch
+                and not getClosestGift(availableGoldenGifts)
+            then
+                self.BeaconedForCurrentBatch = self:TeleportToBeacon()
+            end
+        end)
+
+        return true
+    end
+
+    function controller:StopAll(updateToggles)
+        self.AutoNormal = false
+        self.AutoGolden = false
+        self.AutoBeacon = false
+        self.AutoLobby = false
+        self.ActiveCollection = nil
+        self.CollectionTaskActive = false
+        self.SawGoldenGift = false
+        self.BeaconedForCurrentBatch = false
+        tweening = false
+        self:ResetCandidates()
+
+        if updateToggles then
+            for _, toggle in ipairs({self.NormalToggle, self.GoldenToggle, self.BeaconToggle, self.LobbyToggle}) do
+                if toggle and type(toggle.Set) == "function" then
+                    toggle:Set(false)
+                end
+            end
+        end
+    end
+
+    function controller:Destroy()
+        if self.Destroyed then
+            return
+        end
+
+        self.Destroyed = true
+        self:StopAll(false)
+    end
+
+    celestialIntegration.AutoFarmTab:CreateSection("Gift Collection")
+    controller.NormalToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Collect Normal Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoNormal = value
+
+            if not value and controller.ActiveCollection == "normal" then
+                tweening = false
+            end
+        end
+    })
+    controller.GoldenToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Collect Golden Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoGolden = value
+
+            if not value and controller.ActiveCollection == "golden" then
+                tweening = false
+            end
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Beacon")
+    controller.BeaconToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Auto-Beacon after Golden Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoBeacon = value
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateButton({
+        Name = "Teleport to Beacon Now",
+        Callback = function()
+            controller:TeleportToBeacon()
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Lobby")
+    controller.LobbyToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Auto-Select Lobby Choice",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoLobby = value
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Misc")
+    celestialIntegration.AutoFarmTab:CreateButton({
+        Name = "Cancel All",
+        Callback = function()
+            controller:StopAll(true)
+
+            if notifOn then
+                notif("All auto-farm routines stopped.", "Auto-Farm")
+            end
+        end
+    })
+
+    task.spawn(function()
+        while not controller.Destroyed do
+            task.wait(0.5)
+
+            if controller.Destroyed then
+                break
+            end
+
+            local inRound = ReplicatedStorage:FindFirstChild("InRound")
+            if not inRound or not inRound.Value then
+                if controller.ActiveCollection then
+                    tweening = false
+                end
+
+                controller:ResetCandidates()
+                controller.SawGoldenGift = false
+                controller.BeaconedForCurrentBatch = false
+
+                if controller.AutoLobby
+                    and not controller.LobbyBusy
+                    and tick() - controller.LastLobbyAttempt >= 2.5
+                then
+                    task.spawn(function()
+                        controller:RunLobbySelection()
+                    end)
+                end
+
+                continue
+            end
+
+            controller:CompactCandidates(availableNormalGifts)
+            controller:CompactCandidates(availableGoldenGifts)
+
+            if controller.AutoGolden and not controller.CollectionTaskActive and not tweening then
+                refreshGifts(true, true)
+                controller:CompactCandidates(availableGoldenGifts)
+                local goldenGift = getClosestGift(availableGoldenGifts)
+
+                if goldenGift then
+                    controller.SawGoldenGift = true
+                    controller.BeaconedForCurrentBatch = false
+                    controller:StartCollection("golden")
+                    continue
+                end
+
+                if controller.AutoBeacon
+                    and controller.SawGoldenGift
+                    and not controller.BeaconedForCurrentBatch
+                then
+                    controller.BeaconedForCurrentBatch = controller:TeleportToBeacon()
+                end
+            end
+
+            if controller.AutoNormal and not controller.CollectionTaskActive and not tweening then
+                refreshGifts(true, false)
+                controller:CompactCandidates(availableNormalGifts)
+
+                if getClosestGift(availableNormalGifts) then
+                    controller:StartCollection("normal")
+                end
+            end
+        end
+    end)
+end)()
+
+---------button
+mainTab:CreateSection("Gifts")
+mainTab:CreateParagraph({
+    Title = "NOTE",
+    Content = "Currently, finding gifts are slow. Spam the Collect Normal and Golden Gifts button to start collecting."
+})
+mainTab:CreateButton({
+    Name = "Collect Normal Gifts",
+    Callback = function()
+        collect("normal")
+    end
+})
+mainTab:CreateButton({
+    Name = "Collect Golden Gifts",
+    Callback = function()
+        collect("golden")
+    end
+})
+mainTab:CreateButton({
+    Name = "Cancel Collecting",
+    Callback = function()
+        if tweening then
+            tweening = false
+        end
+    end
+})
+
+mainTab:CreateDivider()
+magSlider = mainTab:CreateSlider({
+    Name = "Gift Collection Range",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(v)
+        magnet:Fire({Add = v})
+    end
+})
+mainTab:CreateButton({
+    Name = "Reset Range",
+    Callback = function()
+        magSlider:Set(1)
+        magnet:Fire({Reset = 1})
+    end
+})
+
+-- local ga = mainTab:CreateToggle({
+--     Name = "Collect Aura (LAGGY ON HIGHER LEVELS)",
+--     CurrentValue = aura,
+--     Callback = function(Value)
+--         aura = Value
+--     end
+-- })
+
+mainTab:CreateDivider()
+;(function()
+celestialIntegration.GiftCounterToggle = mainTab:CreateToggle({
+    Name = "Show Gift Counter Under HUD",
+    CurrentValue = celestialIntegration.Controller.GiftCounterEnabled,
+    Flag = "NULLGUICelestialGiftCounter",
+    Callback = function(value)
+        celestialIntegration.Controller:SetGiftCounterEnabled(value)
+    end
+})
+
+---------------------------------------------------------------------------------------------------------------------------------
+
+if fSignal then
+    upgradeTab:CreateLabel("Your exploit can add upgrades.")
+else
+    upgradeTab:CreateLabel("Your exploit currently doesn't support adding upgrades.")
+end
+upgradeTab:CreateParagraph({
+    Title = "NOTE",
+
