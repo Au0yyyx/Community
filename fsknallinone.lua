@@ -556,6 +556,7 @@ local function statsFor(model, actorType)
                 EnragedCapTime = tonumber(config.EnragedStaminaCapLerpTime),
                 EnragedSpeed = tonumber(config.EnragedSpeed),
                 RunAnimationIds = {},
+                AnimationNamesById = {},
             }
             for animationName, animationId in pairs(config.Animations or {}) do
                 local lower = string.lower(tostring(animationName))
@@ -563,6 +564,8 @@ local function statsFor(model, actorType)
                     local id = tostring(animationId):match("%d+")
                     if id then defaults.RunAnimationIds[id] = true end
                 end
+                local anyId = tostring(animationId):match("%d+")
+                if anyId then defaults.AnimationNamesById[anyId] = lower end
             end
         end
     end
@@ -634,6 +637,7 @@ local function newTracker(model, actorType)
         Enraged = false, EnragedSince = 0,
         WasSprinting = false, RecoveryDelay = 0,
         LastAnimCheck = 0, SprintAnimation = false, EnragedAnimation = false,
+        ActiveAnimations = {}, LastSpecialAnimation = nil,
         LastSprintEvidence = 0,
         NearestDistance = math.huge, PathDistance = math.huge, LastGateScan = 0,
         Gui = gui, Fill = fill, Label = label, Detail = detail,
@@ -662,22 +666,36 @@ local function stateRates(t, actor, state, model)
     local name = t.Name:lower()
     local loss, gain = t.Stats.Loss, t.Stats.Gain
     local mode, frozen, customRegen = nil, false, false
+    local anim = t.ActiveAnimations or {}
+    local function playing(...)
+        for i = 1, select("#", ...) do
+            local wanted = string.lower(select(i, ...))
+            for active in pairs(anim) do
+                if active == wanted or active:find(wanted, 1, true) then return true end
+            end
+        end
+        return false
+    end
 
-    if name:find("guest", 1, true) and truthyState(state, "Charging", "isCharging", "InCharge", "isBlockingCharge") then
+    if name:find("guest", 1, true) and (truthyState(state, "Charging", "isCharging", "InCharge", "isBlockingCharge")
+        or playing("charge")) then
         frozen, mode = true, "CHARGE • FROZEN"
-    elseif name:find("veeronica", 1, true) and truthyState(state, "isSkating", "Skating") then
+    elseif name:find("veeronica", 1, true) and (truthyState(state, "isSkating", "Skating")
+        or playing("sk8", "skate", "trick")) then
         local cfg = actor and actor.Config or {}
         local mult = state and state.InZone and tonumber(cfg.Sk8StaminaLoss)
             or tonumber(cfg.Sk8StaminaLossOut)
             or 1.1
         loss, gain, mode = loss * mult, 0, "SK8 • " .. string.format("%.2fx", mult)
-    elseif name:find("nosferatu", 1, true) and truthyState(state, "InFlight", "isFlying") then
+    elseif name:find("nosferatu", 1, true) and (truthyState(state, "InFlight", "isFlying")
+        or playing("flight", "fly", "ascent", "descent")) then
         gain, mode = 0, "FLIGHT • NO REGEN"
-    elseif name:find("azure", 1, true) and truthyState(state,
-        "StaminaFrozen", "isStaminaFrozen", "DoingRitual", "isTransforming", "InTransformation") then
+    elseif name:find("azure", 1, true) and (truthyState(state,
+        "StaminaFrozen", "isStaminaFrozen", "DoingRitual", "isTransforming", "InTransformation")
+        or playing("ritual", "transform")) then
         frozen, mode = true, "ABILITY • FROZEN"
     elseif name:find("noli", 1, true) and (model:GetAttribute("VoidRushState") == "Charging"
-        or (state and state.VoidRushState == "Charging")) then
+        or (state and state.VoidRushState == "Charging") or playing("voidrushcharge", "void rush charge")) then
         frozen, mode = true, "VOID RUSH • CAPPED"
     end
 
@@ -707,11 +725,17 @@ local function sprintState(tracker, humanoid, actorState, now)
         tracker.LastAnimCheck = now
         tracker.SprintAnimation = false
         tracker.EnragedAnimation = false
+        table.clear(tracker.ActiveAnimations)
         local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
         if animator then
             for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                 local name = string.lower(track.Name)
                 local animationId = track.Animation and tostring(track.Animation.AnimationId):match("%d+")
+                local configuredName = animationId and tracker.Stats.AnimationNamesById
+                    and tracker.Stats.AnimationNamesById[animationId]
+                if track.WeightCurrent > 0.15 and configuredName then
+                    tracker.ActiveAnimations[configuredName] = true
+                end
                 if track.WeightCurrent > 0.15 and name:find("enraged", 1, true) then
                     tracker.EnragedAnimation = true
                 end
