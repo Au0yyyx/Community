@@ -1,0 +1,1284 @@
+       or safety.OperatorIdleDelay
+    local sharkTailDelay = safety.OperatorCancelWithSharkTail
+        and canCancelWithSharkTail(movement)
+        and safety.OperatorSharkTailCancelDelay
+        or 0
+    local delay = clampReactionDelay(
+        configuredDelay + sharkTailDelay,
+        enemyAttackWindows.Operator,
+        safety.OperatorStopDuration,
+        abilityReleaseSettleTimeout
+    )
+    releaseAndStop(delay, safety.OperatorStopDuration, {
+        SharkTail = safety.OperatorCancelWithSharkTail,
+        Jump = safety.OperatorCancelWithJump,
+    })
+end
+
+local function updateOperatorReaction()
+    local startSound = getOperatorStartSound()
+    if startSound ~= enemyReactionState.OperatorStartSound then
+        if enemyReactionState.OperatorStartConnection then
+            enemyReactionState.OperatorStartConnection:Disconnect()
+            enemyReactionState.OperatorStartConnection = nil
+        end
+
+        enemyReactionState.OperatorStartSound = startSound
+        if startSound and startSound:IsA("Sound") then
+            local startConnection = startSound.Played:Connect(function()
+                task.defer(function()
+                    if startSound.Parent then
+                        triggerOperatorReaction()
+                    end
+                end)
+            end)
+            enemyReactionState.OperatorStartConnection = startConnection
+            table.insert(celestialIntegration.Controller.Connections, startConnection)
+        end
+    end
+
+    local operatorIsActive = shared.OperatorActive == true
+    if operatorIsActive and not enemyReactionState.OperatorWasActive then
+        triggerOperatorReaction()
+    end
+    enemyReactionState.OperatorWasActive = operatorIsActive
+end
+
+local function triggerMalfunctionReaction(alert)
+    local safety = celestialIntegration.Controller.EnemySafety
+    local currentTime = time()
+    local isCombatAlert = alert
+        and alert:IsA("Sound")
+        and alert.Name == "VBAlert"
+
+    if celestialIntegration.Controller.Destroyed
+        or not safety.AutoStopMalfunction
+        or not isCombatAlert
+        or currentTime - enemyReactionState.LastMalfunctionTrigger < 0.025 then
+        return
+    end
+
+    enemyReactionState.LastMalfunctionTrigger = currentTime
+    safety.MalfunctionDetections += 1
+    local movement = getAbilityController()
+    local abilityIsActive = isAbilityControllerActive(movement)
+    local configuredDelay = abilityIsActive
+        and safety.MalfunctionAbilityDelay
+        or safety.MalfunctionIdleDelay
+    local sharkTailDelay = safety.MalfunctionCancelWithSharkTail
+        and canCancelWithSharkTail(movement)
+        and safety.MalfunctionSharkTailCancelDelay
+        or 0
+    local stopDuration = math.max(
+        safety.MalfunctionStopDuration,
+        minimumMalfunctionStopDuration
+    )
+    local delay = clampReactionDelay(
+        configuredDelay + sharkTailDelay,
+        enemyAttackWindows.Malfunction,
+        stopDuration,
+        abilityReleaseSettleTimeout
+    )
+    releaseAndStop(delay, stopDuration, {
+        SharkTail = safety.MalfunctionCancelWithSharkTail,
+        Jump = safety.MalfunctionCancelWithJump,
+    })
+end
+
+local function updateMalfunctionReaction()
+    local alert = getMalfunctionAlert()
+    if alert ~= enemyReactionState.MalfunctionAlert then
+        if enemyReactionState.MalfunctionAlertConnection then
+            enemyReactionState.MalfunctionAlertConnection:Disconnect()
+            enemyReactionState.MalfunctionAlertConnection = nil
+        end
+
+        enemyReactionState.MalfunctionAlert = alert
+        enemyReactionState.MalfunctionAlertWasActive = false
+
+        if alert and alert:IsA("Sound") then
+            local alertConnection = alert.Played:Connect(function()
+                task.defer(function()
+                    triggerMalfunctionReaction(alert)
+                end)
+            end)
+            enemyReactionState.MalfunctionAlertConnection = alertConnection
+            table.insert(celestialIntegration.Controller.Connections, alertConnection)
+        end
+    end
+
+    local alertIsActive = alert
+        and alert:IsA("Sound")
+        and alert.IsPlaying
+
+    if alertIsActive and not enemyReactionState.MalfunctionAlertWasActive then
+        triggerMalfunctionReaction(alert)
+    end
+
+    enemyReactionState.MalfunctionAlertWasActive = alertIsActive == true
+end
+
+local function triggerKolonaAbility()
+    local safety = celestialIntegration.Controller.EnemySafety
+    local humanoid = getCharacterControlParts()
+    local abilityIsActive = humanoid and humanoid:GetAttribute("UsingAbility") == true
+
+    if celestialIntegration.Controller.Destroyed
+        or shared.KolonaActive ~= true
+        or enemyReactionState.KolonaTriggered
+        or not safety.AutoUseKolonaAbility
+        or not humanoid
+        or abilityIsActive then
+        return
+    end
+
+    enemyReactionState.KolonaTriggered = true
+    safety.KolonaDetections += 1
+    local kolonaActivation = enemyReactionState.KolonaActivation
+    local delay = clampReactionDelay(
+        safety.KolonaAbilityDelay,
+        enemyAttackWindows.Kolona,
+        safety.KolonaAbilityDuration + 0.03
+    )
+
+    task.delay(delay, function()
+        if celestialIntegration.Controller.Destroyed
+            or shared.KolonaActive ~= true
+            or enemyReactionState.KolonaActivation ~= kolonaActivation then
+            return
+        end
+
+        local currentHumanoid = getCharacterControlParts()
+        if not currentHumanoid
+            or currentHumanoid:GetAttribute("UsingAbility") == true then
+            return
+        end
+
+        currentHumanoid:SetAttribute("UsingAbility", true)
+        enemyReactionState.ForcedAbilityHumanoid = currentHumanoid
+        safety.FallbackAbilityCalls += 1
+        beginAbility()
+
+        local abilityHoldDuration = math.max(safety.KolonaAbilityDuration, 0.1)
+        task.delay(abilityHoldDuration, releaseAbility)
+    end)
+end
+
+local function connectKolonaTargetSound(targetNumber)
+    local numberLabel = getKolonaNumberLabel()
+    local mainFrame = numberLabel and numberLabel.Parent
+    local tickFolder = mainFrame and mainFrame:FindFirstChild("tick")
+    local targetSound = tickFolder and tickFolder:FindFirstChild(tostring(targetNumber))
+
+    if targetSound == enemyReactionState.KolonaTargetSound then
+        return
+    end
+
+    if enemyReactionState.KolonaTargetSoundConnection then
+        enemyReactionState.KolonaTargetSoundConnection:Disconnect()
+        enemyReactionState.KolonaTargetSoundConnection = nil
+    end
+
+    enemyReactionState.KolonaTargetSound = targetSound
+    if not targetSound or not targetSound:IsA("Sound") then
+        return
+    end
+
+    local targetSoundConnection = targetSound.Played:Connect(triggerKolonaAbility)
+    enemyReactionState.KolonaTargetSoundConnection = targetSoundConnection
+    table.insert(celestialIntegration.Controller.Connections, targetSoundConnection)
+end
+
+local function getKolonaCheckWindow()
+    local character = plr.Character
+    if not character then
+        return false
+    end
+
+    if enemyReactionState.KolonaWindowCharacter ~= character then
+        enemyReactionState.KolonaWindowCharacter = character
+        enemyReactionState.KolonaWindowFunction = nil
+        enemyReactionState.KolonaWindowWasOpen = false
+    end
+
+    local windowFunction = enemyReactionState.KolonaWindowFunction
+    local connectionGetter = getconnections or get_signal_cons
+    local upvalueGetter = getupvalues or (debug and debug.getupvalues)
+
+    if type(windowFunction) ~= "function"
+        and type(connectionGetter) == "function"
+        and debug
+        and type(debug.info) == "function" then
+        local foundConnections, signalConnections = pcall(
+            connectionGetter,
+            character:GetAttributeChangedSignal("UsingAbility")
+        )
+
+        if foundConnections then
+            for _, signalConnection in ipairs(signalConnections) do
+                local candidateFunction = signalConnection.Function
+                if type(candidateFunction) == "function" then
+                    local readSource, source = pcall(debug.info, candidateFunction, "s")
+                    if readSource
+                        and type(source) == "string"
+                        and source:find("Kolona_AI", 1, true) then
+                        windowFunction = candidateFunction
+                        enemyReactionState.KolonaWindowFunction = candidateFunction
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    if type(windowFunction) ~= "function" or type(upvalueGetter) ~= "function" then
+        return false
+    end
+
+    local readUpvalues, upvalues = pcall(upvalueGetter, windowFunction)
+    return readUpvalues and type(upvalues) == "table" and upvalues[1] == true
+end
+
+local function installKolonaTickWatchers()
+    local numberLabel = getKolonaNumberLabel()
+    local mainFrame = numberLabel and numberLabel.Parent
+    local tickFolder = mainFrame and mainFrame:FindFirstChild("tick")
+    if not tickFolder then
+        return
+    end
+
+    for _, tickSound in ipairs(tickFolder:GetChildren()) do
+        if tickSound:IsA("Sound")
+            and not enemyReactionState.KolonaTickConnections[tickSound] then
+            local tickConnection = tickSound.Played:Connect(function()
+                if getKolonaCheckWindow() then
+                    triggerKolonaAbility()
+                end
+            end)
+            enemyReactionState.KolonaTickConnections[tickSound] = tickConnection
+            celestialIntegration.Controller.EnemySafety.KolonaTickWatchers += 1
+            table.insert(celestialIntegration.Controller.Connections, tickConnection)
+        end
+    end
+end
+
+local function updateKolonaReaction()
+    installKolonaTickWatchers()
+    local kolonaIsActive = shared.KolonaActive == true
+    local numberLabel = getKolonaNumberLabel()
+    local currentNumber = numberLabel and tonumber(numberLabel.Text)
+    local checkWindowIsOpen = getKolonaCheckWindow()
+
+    if kolonaIsActive and not enemyReactionState.KolonaWasActive then
+        enemyReactionState.KolonaActivation += 1
+        enemyReactionState.KolonaTarget = currentNumber
+        enemyReactionState.KolonaPreviousNumber = currentNumber
+        enemyReactionState.KolonaCountStarted = false
+        enemyReactionState.KolonaTriggered = false
+        if currentNumber then
+            connectKolonaTargetSound(currentNumber)
+        end
+    elseif kolonaIsActive and not enemyReactionState.KolonaTarget and currentNumber then
+        enemyReactionState.KolonaTarget = currentNumber
+        enemyReactionState.KolonaPreviousNumber = currentNumber
+        connectKolonaTargetSound(currentNumber)
+    end
+
+    if checkWindowIsOpen and not enemyReactionState.KolonaWindowWasOpen then
+        triggerKolonaAbility()
+    end
+    enemyReactionState.KolonaWindowWasOpen = checkWindowIsOpen
+
+    if kolonaIsActive and currentNumber and enemyReactionState.KolonaTarget then
+        if enemyReactionState.KolonaPreviousNumber ~= currentNumber then
+            enemyReactionState.KolonaCountStarted = true
+        end
+
+        local reachedRequiredNumber = enemyReactionState.KolonaCountStarted
+            and currentNumber == enemyReactionState.KolonaTarget
+            and not enemyReactionState.KolonaTriggered
+
+        if reachedRequiredNumber then
+            triggerKolonaAbility()
+        end
+
+        enemyReactionState.KolonaPreviousNumber = currentNumber
+    end
+
+    if not kolonaIsActive and enemyReactionState.KolonaWasActive then
+        enemyReactionState.KolonaActivation += 1
+        enemyReactionState.KolonaTarget = nil
+        enemyReactionState.KolonaPreviousNumber = nil
+        enemyReactionState.KolonaCountStarted = false
+        enemyReactionState.KolonaTriggered = false
+        enemyReactionState.KolonaTargetSound = nil
+
+        if enemyReactionState.KolonaTargetSoundConnection then
+            enemyReactionState.KolonaTargetSoundConnection:Disconnect()
+            enemyReactionState.KolonaTargetSoundConnection = nil
+        end
+    end
+
+    enemyReactionState.KolonaWasActive = kolonaIsActive
+end
+
+table.insert(celestialIntegration.Controller.Connections, RunService.Heartbeat:Connect(function()
+    if celestialIntegration.Controller.Destroyed then
+        return
+    end
+
+    updateOperatorReaction()
+    updateMalfunctionReaction()
+    updateKolonaReaction()
+end))
+
+function celestialIntegration.Controller:ReleaseReactionAbility()
+    if enemyReactionState.ForcedAbilityHumanoid then
+        releaseAbility()
+    end
+end
+
+function celestialIntegration.Controller:RestoreReactionCharacter()
+    restoreReactionInput()
+end
+
+end)()
+
+function celestialIntegration.Controller:DestroyGiftCounter()
+    if self.GiftCounterGui then
+        self.GiftCounterGui:Destroy()
+        self.GiftCounterGui = nil
+    end
+end
+
+local gameGui
+local gameGiftLabel
+local normalGiftLabel
+local goldenGiftLabel
+
+local function getGiftCounterValue(counter, attributeName)
+    local attributeValue = counter and counter:GetAttribute(attributeName)
+    if typeof(attributeValue) == "number" then
+        return math.max(math.floor(attributeValue), 0)
+    end
+
+    return 0
+end
+
+local function getGiftCounterPercentage(collected, maximum)
+    if maximum <= 0 then
+        return 0
+    end
+
+    return math.clamp(math.floor((collected / maximum) * 100 + 0.5), 0, 100)
+end
+
+local function updateCelestialGiftCounterLayout()
+    if not gameGiftLabel or not normalGiftLabel or not goldenGiftLabel then
+        return
+    end
+
+    local lineHeight = math.max(math.floor(gameGiftLabel.AbsoluteSize.Y * 0.75), 30)
+    local labelHeight = math.max(math.floor(gameGiftLabel.AbsoluteSize.Y * 0.7), 28)
+    local labelSize = UDim2.new(0.75, 0, 0, labelHeight)
+
+    normalGiftLabel.AnchorPoint = Vector2.new(0.5, gameGiftLabel.AnchorPoint.Y)
+    goldenGiftLabel.AnchorPoint = normalGiftLabel.AnchorPoint
+    normalGiftLabel.Position = gameGiftLabel.Position + UDim2.fromOffset(0, lineHeight)
+    goldenGiftLabel.Position = gameGiftLabel.Position + UDim2.fromOffset(0, lineHeight * 2)
+    normalGiftLabel.Size = labelSize
+    goldenGiftLabel.Size = labelSize
+end
+
+local function updateCelestialGiftCounter()
+    local giftCounterGui = celestialIntegration.Controller.GiftCounterGui
+    if not giftCounterGui or not gameGui or not gameGiftLabel then
+        return
+    end
+
+    local roundIsActive = not inRound or inRound.Value == true
+    giftCounterGui.Enabled = celestialIntegration.Controller.GiftCounterEnabled
+        and not celestialIntegration.Controller.Destroyed
+        and roundIsActive
+        and gameGui.Enabled
+        and gameGiftLabel.Visible
+
+    local normalCounter = counters:FindFirstChild("Gift") or counters:FindFirstChild("Normal")
+    local goldenCounter = counters:FindFirstChild("GoldenGift")
+    local normalCollected = getGiftCounterValue(normalCounter, "Collected")
+    local normalMaximum = getGiftCounterValue(normalCounter, "MaxGifts")
+    local goldenCollected = getGiftCounterValue(goldenCounter, "Collected")
+    local goldenMaximum = getGiftCounterValue(goldenCounter, "MaxGifts")
+    local giftsUntilGolden = math.max(normalMaximum - normalCollected, 0)
+    local normalPercentage = getGiftCounterPercentage(normalCollected, normalMaximum)
+    local goldenPercentage = getGiftCounterPercentage(goldenCollected, goldenMaximum)
+
+    normalGiftLabel.Text = string.format(
+        "%d/%d (%d%%) %d gifts left",
+        normalCollected,
+        normalMaximum,
+        normalPercentage,
+        giftsUntilGolden
+    )
+    goldenGiftLabel.Text = string.format(
+        "%d/%d (%d%%)",
+        goldenCollected,
+        goldenMaximum,
+        goldenPercentage
+    )
+end
+
+local function createCelestialGiftCounter()
+    local playerGui = plr:WaitForChild("PlayerGui")
+    gameGui = playerGui:WaitForChild("GUI", 10)
+    gameGiftLabel = gameGui and gameGui:WaitForChild("Gifts", 10)
+
+    if celestialIntegration.Controller.Destroyed
+        or not gameGui
+        or not gameGiftLabel
+        or not gameGiftLabel:IsA("TextLabel") then
+        return false
+    end
+
+    for _, existingGui in ipairs(playerGui:GetChildren()) do
+        if existingGui.Name == "CelestialGiftCounter" then
+            existingGui:Destroy()
+        end
+    end
+
+    local giftCounterGui = Instance.new("ScreenGui")
+    giftCounterGui.Name = "CelestialGiftCounter"
+    giftCounterGui.ResetOnSpawn = false
+    giftCounterGui.IgnoreGuiInset = gameGui.IgnoreGuiInset
+    giftCounterGui.DisplayOrder = gameGui.DisplayOrder + 1
+    giftCounterGui.ZIndexBehavior = gameGui.ZIndexBehavior
+    giftCounterGui.Parent = playerGui
+    celestialIntegration.Controller.GiftCounterGui = giftCounterGui
+
+    local function cloneGiftLabel(name, textColor)
+        local label = gameGiftLabel:Clone()
+        label.Name = name
+        label.RichText = false
+        label.Text = "0/0"
+        label.TextColor3 = textColor
+        label.TextScaled = true
+        label.TextWrapped = false
+        label.ZIndex = gameGiftLabel.ZIndex + 1
+
+        for _, descendant in ipairs(label:GetDescendants()) do
+            if descendant:IsA("LuaSourceContainer") then
+                descendant:Destroy()
+            end
+        end
+
+        local textSizeConstraint = label:FindFirstChildOfClass("UITextSizeConstraint")
+            or Instance.new("UITextSizeConstraint")
+        textSizeConstraint.MinTextSize = 14
+        textSizeConstraint.MaxTextSize = 32
+        textSizeConstraint.Parent = label
+        label.Parent = giftCounterGui
+        return label
+    end
+
+    normalGiftLabel = cloneGiftLabel("NormalGifts", Color3.new(1, 1, 1))
+    goldenGiftLabel = cloneGiftLabel("GoldenGifts", Color3.new(1, 1, 0))
+
+    local function track(connection)
+        table.insert(celestialIntegration.Controller.Connections, connection)
+    end
+
+    track(gameGiftLabel:GetPropertyChangedSignal("Text"):Connect(updateCelestialGiftCounter))
+    track(gameGiftLabel:GetPropertyChangedSignal("Position"):Connect(updateCelestialGiftCounterLayout))
+    track(gameGiftLabel:GetPropertyChangedSignal("Size"):Connect(updateCelestialGiftCounterLayout))
+    track(gameGiftLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCelestialGiftCounterLayout))
+    track(gameGiftLabel:GetPropertyChangedSignal("Visible"):Connect(updateCelestialGiftCounter))
+    track(gameGui:GetPropertyChangedSignal("Enabled"):Connect(updateCelestialGiftCounter))
+
+    if inRound then
+        track(inRound.Changed:Connect(updateCelestialGiftCounter))
+    end
+
+    for _, counter in ipairs({ counters:FindFirstChild("Gift"), counters:FindFirstChild("GoldenGift") }) do
+        if counter then
+            track(counter.Changed:Connect(updateCelestialGiftCounter))
+            track(counter:GetAttributeChangedSignal("Collected"):Connect(updateCelestialGiftCounter))
+            track(counter:GetAttributeChangedSignal("MaxGifts"):Connect(updateCelestialGiftCounter))
+        end
+    end
+
+    updateCelestialGiftCounterLayout()
+    updateCelestialGiftCounter()
+    return true
+end
+
+function celestialIntegration.Controller:SetGiftCounterEnabled(value)
+    self.GiftCounterEnabled = value == true
+    updateCelestialGiftCounter()
+end
+
+local function isShieldBreakMessage(value)
+    if typeof(value) ~= "string" then
+        return false
+    end
+
+    local lowerValue = string.lower(value)
+    return lowerValue:find("shield lost to", 1, true) ~= nil
+        or lowerValue:find("no shields remaining", 1, true) ~= nil
+        or lowerValue:find("shield broken", 1, true) ~= nil
+end
+
+function celestialIntegration.Controller:HandleShieldNotification(...)
+    if not self.AutoEnableOnShieldBreak or self.Enabled or self.Destroyed then
+        return false
+    end
+
+    local arguments = table.pack(...)
+    for argumentIndex = 1, arguments.n do
+        if isShieldBreakMessage(arguments[argumentIndex]) then
+            self.ShieldTriggers += 1
+            self:SetEnabled(true)
+            self:SetSafetyToggle(true)
+            self:RefreshSafetyFilter()
+
+            if notifOn then
+                notif("Celestial safety enabled after shield break.", "Celestial")
+            end
+
+            return true
+        end
+    end
+
+    return false
+end
+
+local function isEnemyUpdatePositionRemote(instance)
+    return instance:IsA("RemoteEvent")
+        and instance.Name == "UpdatePosition"
+        and instance:IsDescendantOf(enemies)
+end
+
+local function installUpdatePositionReceiver(remote)
+    if celestialIntegration.Controller.Destroyed or celestialIntegration.Controller.UpdatePositionReceivers[remote] then
+        return false
+    end
+
+    local receiverConnection = remote.OnClientEvent:Connect(function()
+    end)
+    celestialIntegration.Controller.UpdatePositionReceivers[remote] = receiverConnection
+    table.insert(celestialIntegration.Controller.Connections, receiverConnection)
+
+    local cleanupConnection
+    cleanupConnection = remote.Destroying:Connect(function()
+        celestialIntegration.Controller.UpdatePositionReceivers[remote] = nil
+        receiverConnection:Disconnect()
+        cleanupConnection:Disconnect()
+    end)
+    table.insert(celestialIntegration.Controller.Connections, cleanupConnection)
+    return true
+end
+
+local function isRealityBreakClientEvent(instance)
+    if not instance:IsA("RemoteEvent") or instance.Name ~= "ClientEvent" then
+        return false
+    end
+
+    local attackPart = instance.Parent
+    if not attackPart or not attackPart:IsDescendantOf(enemies) then
+        return false
+    end
+
+    local lowerAttackName = string.lower(attackPart.Name)
+    return lowerAttackName:find("realitybreak", 1, true) ~= nil
+        and attackPart:FindFirstChild("RealityBreak_ClientAI") ~= nil
+end
+
+local function restoreRealityBreakGuard(remote)
+    local guardState = celestialIntegration.Controller.RealityBreakGuards[remote]
+    if not guardState then
+        return
+    end
+
+    celestialIntegration.Controller.RealityBreakGuards[remote] = nil
+
+    if guardState.WrapperConnection then
+        pcall(function()
+            guardState.WrapperConnection:Disconnect()
+        end)
+    end
+
+    if guardState.OriginalConnection and type(guardState.OriginalConnection.Enable) == "function" then
+        pcall(function()
+            guardState.OriginalConnection:Enable()
+        end)
+    end
+end
+
+function celestialIntegration.Controller:RestoreRealityBreakGuards()
+    local guardedRemotes = {}
+    for remote in pairs(self.RealityBreakGuards) do
+        table.insert(guardedRemotes, remote)
+    end
+
+    for _, remote in ipairs(guardedRemotes) do
+        restoreRealityBreakGuard(remote)
+    end
+end
+
+local signalConnectionsFunction = getconnections or get_signal_cons
+
+local function installRealityBreakGuard(remote)
+    if celestialIntegration.Controller.Destroyed
+        or celestialIntegration.Controller.RealityBreakGuards[remote]
+        or type(signalConnectionsFunction) ~= "function" then
+        return false
+    end
+
+    task.spawn(function()
+        for _ = 1, 20 do
+            if celestialIntegration.Controller.Destroyed or not remote.Parent then
+                return
+            end
+
+            local foundConnections, signalConnections = pcall(signalConnectionsFunction, remote.OnClientEvent)
+            if foundConnections then
+                for _, originalConnection in ipairs(signalConnections) do
+                    local readConnectionSuccessfully, originalFunction, disableFunction, enableFunction = pcall(
+                        function()
+                            return originalConnection.Function,
+                                originalConnection.Disable,
+                                originalConnection.Enable
+                        end
+                    )
+                    local canDisable = readConnectionSuccessfully and type(disableFunction) == "function"
+                    local canEnable = readConnectionSuccessfully and type(enableFunction) == "function"
+
+                    if type(originalFunction) == "function" and canDisable and canEnable then
+                        local disabledSuccessfully = pcall(function()
+                            originalConnection:Disable()
+                        end)
+
+                        if disabledSuccessfully then
+                            local wrapperConnection = remote.OnClientEvent:Connect(function(...)
+                                if celestialIntegration.Controller.EnemySafety.AutoDisableRealityBreak then
+                                    return
+                                end
+
+                                local arguments = table.pack(...)
+
+                                if arguments[1] == "Pizza2" then
+                                    local character = plr.Character
+                                    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                                    if not rootPart then
+                                        return
+                                    end
+                                end
+
+                                task.spawn(function()
+                                    local callbackSucceeded, callbackError = pcall(
+                                        originalFunction,
+                                        table.unpack(arguments, 1, arguments.n)
+                                    )
+
+                                    if not callbackSucceeded then
+                                        warn("[NULLGUI RealityBreak Guard] "..tostring(callbackError))
+                                    end
+                                end)
+                            end)
+
+                            celestialIntegration.Controller.RealityBreakGuards[remote] = {
+                                OriginalConnection = originalConnection,
+                                WrapperConnection = wrapperConnection,
+                            }
+
+                            local cleanupConnection
+                            cleanupConnection = remote.Destroying:Connect(function()
+                                restoreRealityBreakGuard(remote)
+                                cleanupConnection:Disconnect()
+                            end)
+                            table.insert(celestialIntegration.Controller.Connections, cleanupConnection)
+                            return
+                        end
+                    end
+                end
+            end
+
+            task.wait(0.05)
+        end
+    end)
+
+    return true
+end
+
+local function installEnemyCompatibility(instance)
+    if isEnemyUpdatePositionRemote(instance) then
+        installUpdatePositionReceiver(instance)
+    end
+
+    if isRealityBreakClientEvent(instance) then
+        installRealityBreakGuard(instance)
+        return
+    end
+
+    if instance.Name == "RealityBreak_ClientAI" and instance.Parent then
+        local clientEvent = instance.Parent:FindFirstChild("ClientEvent")
+        if clientEvent and isRealityBreakClientEvent(clientEvent) then
+            installRealityBreakGuard(clientEvent)
+        end
+    end
+end
+
+function celestialIntegration.Controller:Panic()
+    if self.Destroyed then
+        return
+    end
+
+    self.Destroyed = true
+    self.AutoEnableOnShieldBreak = false
+    self.Enabled = false
+    self.EnemySafety.AutoStopOperator = false
+    self.EnemySafety.AutoStopMalfunction = false
+    self.EnemySafety.AutoUseKolonaAbility = false
+    self.EnemySafety.AutoLookAwayVoidbreaker = false
+    table.clear(self.EnemySafety.Friendly)
+    RunService:UnbindFromRenderStep(self.LookAwayBindingName)
+    self:ReleaseReactionAbility()
+    self:RestoreReactionCharacter()
+    self:RestoreRealityBreakGuards()
+    self:DisconnectAll()
+    self:DestroyGiftCounter()
+    table.clear(self.UpdatePositionReceivers)
+    celestialControllerRegistry[self] = nil
+
+    if environment.CelestialVisibleHarmlessController == self then
+        environment.CelestialVisibleHarmlessController = nil
+    end
+
+    if celestialNamecallDispatcher.ActiveController == self then
+        celestialNamecallDispatcher.ActiveController = nil
+        celestialNamecallDispatcher.Filter = nil
+    end
+end
+
+celestialIntegration.NamecallFilterInstalled = installCelestialNamecallFilter()
+
+RunService:UnbindFromRenderStep(celestialIntegration.Controller.LookAwayBindingName)
+RunService:BindToRenderStep(
+    celestialIntegration.Controller.LookAwayBindingName,
+    Enum.RenderPriority.Camera.Value + 1,
+    function()
+        if celestialIntegration.Controller.Destroyed
+            or not celestialIntegration.Controller.EnemySafety.AutoLookAwayVoidbreaker
+            or _G.VoidbreakerActive ~= true
+        then
+            return
+        end
+
+        local voidbreaker = enemies:FindFirstChild("Voidbreaker")
+        local currentCamera = workspace.CurrentCamera
+        if not voidbreaker or not currentCamera then
+            return
+        end
+
+        local awayDirection = currentCamera.CFrame.Position - voidbreaker.Position
+        if awayDirection.Magnitude <= 0.1 then
+            return
+        end
+
+        currentCamera.CFrame = CFrame.lookAt(
+            currentCamera.CFrame.Position,
+            currentCamera.CFrame.Position + awayDirection.Unit,
+            currentCamera.CFrame.UpVector
+        )
+    end
+)
+
+table.insert(celestialIntegration.Controller.Connections, workspace.DescendantAdded:Connect(function(descendant)
+    installEnemyCompatibility(descendant)
+end))
+
+for _, descendant in ipairs(enemies:GetDescendants()) do
+    installEnemyCompatibility(descendant)
+end
+
+if notifyRemote and notifyRemote:IsA("RemoteEvent") then
+    table.insert(celestialIntegration.Controller.Connections, notifyRemote.OnClientEvent:Connect(function(...)
+        celestialIntegration.Controller:HandleShieldNotification(...)
+    end))
+end
+
+if inRound then
+    table.insert(celestialIntegration.Controller.Connections, inRound.Changed:Connect(function(roundIsActive)
+        if roundIsActive == true then
+            return
+        end
+
+        celestialIntegration.Controller:SetSafetyToggle(false)
+    end))
+end
+
+task.spawn(createCelestialGiftCounter)
+end)()
+
+local enemyimage = "rbxassetid://90968042204988"
+local curseimage = "rbxassetid://71252790926685"
+local upgradeimage = "rbxassetid://109624131383272"
+
+local function checkIntermissionType()
+    selection = selection or workspace:FindFirstChild("Select")
+    local currentType = "ENEMIES"
+
+    if selection then
+        local imagelabel = safeFind(selection, {
+            "Sign",
+            "Billboard",
+            "ImageLabel"
+        })
+
+        if imagelabel then
+            if imagelabel.Image == enemyimage then
+                currentType = "ENEMIES"
+            elseif imagelabel.Image == curseimage then
+                currentType = "CURSES"
+            elseif imagelabel.Image == upgradeimage then
+                currentType = "UPGRADES"
+            end
+        end
+    end
+
+    return currentType
+end
+
+local closestGiftTracer = Drawing.new("Line")
+closestGiftTracer.Visible = false
+closestGiftTracer.Thickness = 2
+closestGiftTracer.Color = Color3.new(1, 1, 0)
+closestGiftTracer.Transparency = 1
+
+local medalTracer = Drawing.new("Line")
+medalTracer.Visible = false
+medalTracer.Thickness = 2
+medalTracer.Color = Color3.new(0.75, 0.75, 0.75)
+medalTracer.Transparency = 1
+
+local function getClosestAnyGift()
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return end
+
+    local rootPos = root.Position
+    local closest, shortest = nil, math.huge
+
+    local function check(list)
+        for _, gift in ipairs(list) do
+            if gift and gift.Transparency == 0 and gift:FindFirstChild("Collect") ~= nil then
+                task.spawn(function()
+                    local diff = gift.Position - rootPos
+                    local dist = diff.Magnitude
+                
+                    if dist < shortest then
+                        shortest = dist
+                        closest = gift
+                    end
+                end)
+            end
+        end
+    end
+
+    check(availableNormalGifts)
+    check(availableGoldenGifts)
+
+    return closest
+end
+
+local lastRefresh = 0
+local scanIndex = 1
+local scanIndexTwo = 1
+local SCAN_SIZE = 100
+local normalList = {}
+local goldenList = {}
+
+local function updateGiftLists()
+    normalList = gifts:GetChildren()
+    goldenList = goldengifts:GetChildren()
+end
+
+table.insert(connections, gifts.ChildAdded:Connect(updateGiftLists))
+table.insert(connections, gifts.ChildRemoved:Connect(updateGiftLists))
+table.insert(connections, goldengifts.ChildAdded:Connect(updateGiftLists))
+table.insert(connections, goldengifts.ChildRemoved:Connect(updateGiftLists))
+
+updateGiftLists()
+
+local function refreshGifts(skip, golden)
+    local currentAvailableGifts = #availableNormalGifts
+    if #availableNormalGifts == 0 or golden then
+        currentAvailableGifts = #availableGoldenGifts
+    end
+    local REFRESH_RATE = (currentAvailableGifts > 5000 and 1/0.25) or (currentAvailableGifts > 3000 and 1/1) or (currentAvailableGifts > 1500 and 1/3) or (currentAvailableGifts > 1000 and 1/5) or (currentAvailableGifts > 500 and 1/12.5) or 1/25
+
+    if not skip then
+        if tick() - lastRefresh < REFRESH_RATE then return end
+        lastRefresh = tick()
+    end
+
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return end
+
+    local rootPos = root.Position
+
+    for i = 1, SCAN_SIZE do
+        local gift = normalList[scanIndex]
+        if not gift then
+            scanIndex = 1
+            break
+        end
+
+        if gift.Transparency ~= 1 and gift:FindFirstChild("Collect", true) then
+            local dist = (rootPos - gift.Position).Magnitude
+
+            if dist <= 500 then
+                availableNormalGifts[#availableNormalGifts+1] = gift
+            end
+        end
+
+        scanIndex += 1
+    end
+
+    for i = 1, SCAN_SIZE do
+        local gift = goldenList[scanIndexTwo]
+        if not gift then
+            scanIndexTwo = 1
+            break
+        end
+
+        if gift.Transparency ~= 1 and gift:FindFirstChild("Collect", true) then
+            local dist = (rootPos - gift.Position).Magnitude
+
+            if dist <= 500 then
+                availableGoldenGifts[#availableGoldenGifts+1] = gift
+            end
+        end
+
+        scanIndexTwo += 1
+    end
+end
+
+local function getActiveTripmines()
+    local active = {}
+    for _, mine in tripmines:GetChildren() do
+        if mine.Transparency ~= 1 then
+            table.insert(active, mine)
+        end
+    end
+    if goldentripmines then
+        for _, mine in goldentripmines:GetChildren() do
+            if mine.Transparency ~= 1 then
+                table.insert(active, mine)
+            end
+        end
+    end
+    return active
+end
+
+local function pathBlocked(targetPos, activeTripmines, activeEnemies)
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return true end
+
+    local rootPos = root.Position
+    local fakeSize = Vector3.new(2,5,2)
+    
+    local minX = math.min(rootPos.X - fakeSize.X/2, targetPos.X - fakeSize.X/2)
+    local minY = math.min(rootPos.Y - fakeSize.Y/2, targetPos.Y - fakeSize.Y/2)
+    local minZ = math.min(rootPos.Z - fakeSize.Z/2, targetPos.Z - fakeSize.Z/2)
+    local maxX = math.max(rootPos.X + fakeSize.X/2, targetPos.X + fakeSize.X/2)
+    local maxY = math.max(rootPos.Y + fakeSize.Y/2, targetPos.Y + fakeSize.Y/2)
+    local maxZ = math.max(rootPos.Z + fakeSize.Z/2, targetPos.Z + fakeSize.Z/2)
+
+    for _, mine in activeTripmines do
+        local pos = mine.Position
+        local size = mine.Size
+        local minMx, maxMx = pos.X - size.X/2, pos.X + size.X/2
+        local minMy, maxMy = pos.Y - size.Y/2, pos.Y + size.Y/2
+        local minMz, maxMz = pos.Z - size.Z/2, pos.Z + size.Z/2
+
+        local overlapX = maxX >= minMx and minX <= maxMx
+        local overlapY = maxY >= minMy and minY <= maxMy
+        local overlapZ = maxZ >= minMz and minZ <= maxMz
+
+        if overlapX and overlapY and overlapZ then
+            return true
+        end
+    end
+    for _, enemy in activeEnemies do
+        local pos = enemy.Position
+        local size = enemy.Size
+        local minMx, maxMx = pos.X - size.X/2, pos.X + size.X/2
+        local minMy, maxMy = pos.Y - size.Y/2, pos.Y + size.Y/2
+        local minMz, maxMz = pos.Z - size.Z/2, pos.Z + size.Z/2
+
+        local overlapX = maxX >= minMx and minX <= maxMx
+        local overlapY = maxY >= minMy and minY <= maxMy
+        local overlapZ = maxZ >= minMz and minZ <= maxMz
+
+        if overlapX and overlapY and overlapZ then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getClosestGift(giftList)
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not root then return end
+
+    local rootPos = root.Position
+    local closest, shortest = nil, math.huge
+
+    for _, gift in ipairs(giftList) do
+        if gift and gift.Transparency == 0 and gift:FindFirstChild("Collect", true) then 
+            local diff = gift.Position - rootPos
+            local dist = diff.Magnitude
+
+            if dist < shortest then
+                shortest = dist
+                closest = gift
+            end
+        end
+    end
+
+    return closest, shortest
+end
+
+local function protectTripmine(trip)
+    if not trip:GetAttribute("uuid") then
+        trip:SetAttribute("uuid", HttpService:GenerateGUID(false))
+    end
+
+    local id = trip:GetAttribute("uuid")
+
+    if tripmineprots:FindFirstChild(id) then return end
+
+    local startPos = trip.Position
+
+    local sizeoffset = trip.Size.X + 3
+
+    local p = Instance.new("Part")
+    p.Name = id
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(sizeoffset, sizeoffset, sizeoffset)
+    p.Position = startPos
+    p.Anchored = true
+    p.CanCollide = true
+    p.Transparency = 0
+    p.Parent = tripmineprots
+
+    trip:GetPropertyChangedSignal("Transparency"):Once(function()
+        p:Destroy()
+    end)
+end
+
+local function protectBullet(b)
+    if not b:GetAttribute("uuid") then
+        b:SetAttribute("uuid", HttpService:GenerateGUID(false))
+    end
+
+    local id = b:GetAttribute("uuid")
+
+    if bulletprots:FindFirstChild(id) then return end
+
+    local startPos = b.Position
+
+    local sizeoffset = b.Size.X + 5
+
+    local p = Instance.new("Part")
+    p.Name = id
+    p.Shape = Enum.PartType.Ball
+    p.Size = Vector3.new(sizeoffset, sizeoffset, sizeoffset)
+    p.Position = startPos
+    p.Anchored = true
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Transparency = 0.35
+    p.Parent = bulletprots
+
+    b:GetPropertyChangedSignal("Transparency"):Once(function()
+        p:Destroy()
+    end)
+end
+
+local function goTo(part, activeTripmines, activeEnemies)
+    if not activeEnemies then activeEnemies = enemies:GetChildren() end
+    if not part then return end
+    local char = getChar(plr)
+    local root, hitbox = getRoot(char)
+    local rootPos = root and root.Position
+    if not root or not hitbox then return end
+
+    local pos = part:IsA("Model") and part:GetPivot().Position or part.Position
+    if part.Name == "Spawn" then pos += Vector3.new(0,4,0) end
+    local diff = pos - rootPos
+    local dist = diff.Magnitude
+    if dist == 0 or dist >= 10000 then return end
+
+    local direction = diff.Unit
+    root.CFrame = CFrame.new(root.Position, root.Position + direction) * CFrame.Angles(0, math.rad(90), 0)
+
+    local blocked = pathBlocked(pos, activeTripmines, activeEnemies)
+    if blocked and (part.Name == "Gift" or part.Name == "GoldenGift") then
+        root.Position = pos
+        task.wait(.3)
+        return
+    end
+
+    local info = TweenInfo.new(dist / 120, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
+    local tween = TweenService:Create(root, info, {Position = pos})
+    tween:Play()
+    TweenService:Create(hitbox, info, {Position = pos}):Play()
+
+    task.spawn(function()
+        while tween.PlaybackState == Enum.PlaybackState.Playing do
+            if pathBlocked(pos, activeTripmines, activeEnemies) then
+                tween:Cancel()
+                break
+            end
+            task.wait(0.05)
+        end
+    end)
+    tween.Completed:Once(function()
+        hitbox.Position = root.Position
+    end)
+
+    return tween
+end
+
+
+
+local function getAltarPrompts()
+    local prompts = {}
+    for _, p in currentRooms:GetDescendants() do
+        if p.Name == "Prompt" and p:IsA("ProximityPrompt") then
+            table.insert(prompts, {
+                Prompt = p,
+                Text = p.ObjectText
+            })
+        end
+    end
+
+    return prompts
+end
+
+local function disableEnemy(enemyName, willDestroy, willBreakAI, failNotif)
+    if failNotif == nil then
+        failNotif = true
+    end
+    if willBreakAI == nil then
+        willBreakAI = false
+    end
+
+    local function loopEnemies(name, remove, list)
+        list = list or enemies
+        remove = remove or "TouchInterest"
+
+        local n = 0
+        local total = 0
+        local enemiesFound = {}
+
+        for _, sameenemy in list:GetChildren() do
+            if sameenemy.Name ~= name then
+                continue
+            end
+
+            local loaded = sameenemy:FindFirstChild(remove, true) or sameenemy:FindFirstChild(name.."_ClientAI", true) or sameenemy:GetAttribute("Disabled") == true
+            
+            if not loaded then
+                continue
+            end
+
+            total += 1
+            table.insert(enemiesFound, sameenemy)
+
+            if sameenemy:GetAttribute("Disabled") == true then
+                n += 1
+                continue
+            end
+
+            local disabledThisEnemy = false
+
+            for _, part in sameenemy:GetDescendants() do
+                if part.Name == remove then
+                    part:Destroy()
+                    disabledThisEnemy = true
+                end
+            end
+
+            if disabledThisEnemy then
+                sameenemy:SetAttribute("Disabled", true)
+                n += 1
+            end
+        end
+
+        return n, total, enemiesFound
+    end
+
+    local function destroyEnemy(name, list)
+        list = list or enemies
+
+        for _, sameenemy in list:GetChildren() do
+            if sameenemy.Name == name then
+                sameenemy:Destroy()
+            end
+        end
+
+        if notifOn then
+            notif(name.." disabled. (destroyed)", "Enemy")
+        end
+
+        return true
+    end
+
+    local function disableClientAIEnemy(name, clientScriptName)
+        local total = 0
+        local disabled = 0
+
+        for _, enemy in ipairs(enemies:GetChildren()) do
+            if enemy.Name == name then
+                total += 1
+
+                if enemy:GetAttribute("Disabled") == true then
+                    disabled += 1
+                    continue
+                end
+
+                local clientScript = enemy:FindFirstChild(clientScriptName, true)
+                if clientScript then
+                    clientScript.Enabled = false
+                    enemy:SetAttribute("Disabled", true)
+                    disabled += 1
+
+                    local enabledGuard
+                    enabledGuard = clientScript:GetPropertyChangedSignal("Enabled"):Connect(function()
+                        if not clientScript.Parent or not enemy.Parent then
+                            enabledGuard:Disconnect()
+                            return
+                        end
+
+                        if clientScript.Enabled then
+                            clientScript.Enabled = false
+                        end
+                    end)
+                    table.insert(connections, enabledGuard)
+                end
+            end
+        end
+
+        return total > 0 and disabled >= total
+    end
+
+    local disableFunction = {
+        Basic = function(name, willDestroy, willBreakAI)
+          
