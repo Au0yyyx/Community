@@ -1,0 +1,1330 @@
+fset = target - center
+                    local direction = offset.Magnitude > 0.001 and offset.Unit or Vector2.new(0, -1)
+                    local perpendicular = Vector2.new(-direction.Y, direction.X)
+                    visual.Arrow.PointA = target + direction * 14
+                    visual.Arrow.PointB = target - direction * 9 + perpendicular * 7
+                    visual.Arrow.PointC = target - direction * 9 - perpendicular * 7
+                end
+            end
+        end
+
+        for instrument in pairs(self.CadenceVisuals) do
+            if not activeInstruments[instrument] then
+                self:DestroyCadenceVisual(instrument)
+            end
+        end
+    end
+
+    function controller:Destroy()
+        if self.Destroyed then
+            return
+        end
+
+        self.Destroyed = true
+        self.AntiAfk = false
+        self.AntiBlur = false
+        self.RemoveScorchedVisuals = false
+        self.LowPoly = false
+        self:RefreshBlur()
+        self:RefreshScorchedVisuals()
+        self:RefreshLowPoly()
+
+        local instruments = {}
+        for instrument in pairs(self.CadenceVisuals) do
+            table.insert(instruments, instrument)
+        end
+        for _, instrument in ipairs(instruments) do
+            self:DestroyCadenceVisual(instrument)
+        end
+
+        for _, connection in ipairs(self.Connections) do
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+        table.clear(self.Connections)
+    end
+
+    controller:Track(plr.Idled:Connect(function()
+        if not controller.AntiAfk or controller.Destroyed then
+            return
+        end
+
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            local cameraCFrame = camera and camera.CFrame or CFrame.new()
+            controller.VirtualUser:CaptureController()
+            controller.VirtualUser:Button2Down(Vector2.zero, cameraCFrame)
+            task.wait(0.1)
+            controller.VirtualUser:Button2Up(Vector2.zero, cameraCFrame)
+        end)
+    end))
+
+    controller:Track(game.DescendantAdded:Connect(function(descendant)
+        if controller.Destroyed then
+            return
+        end
+
+        if descendant:IsA("BlurEffect") then
+            controller:SuppressBlur(descendant)
+        end
+        if controller.RemoveScorchedVisuals then
+            controller:SuppressScorchedVisual(descendant)
+        end
+        if controller.LowPoly then
+            controller:ApplyLowPoly(descendant)
+        end
+    end))
+    controller:Track(RunService.RenderStepped:Connect(function()
+        controller:RefreshCadenceEsp()
+    end))
+
+    celestialIntegration.AutoFarmTab:CreateSection("Utilities")
+    celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Anti-AFK",
+        CurrentValue = false,
+        Flag = "NULLGUIAntiAfk",
+        Callback = function(value)
+            controller.AntiAfk = value == true
+        end,
+    })
+
+    visualTab:CreateSection("Visual Removers")
+    visualTab:CreateToggle({
+        Name = "Anti-Blur",
+        CurrentValue = false,
+        Flag = "NULLGUIAntiBlur",
+        Callback = function(value)
+            controller.AntiBlur = value == true
+            controller:RefreshBlur()
+        end,
+    })
+    visualTab:CreateToggle({
+        Name = "Remove Scorched Earth Visuals",
+        CurrentValue = false,
+        Flag = "NULLGUIRemoveScorchedEarthVisuals",
+        Callback = function(value)
+            controller.RemoveScorchedVisuals = value == true
+            controller:RefreshScorchedVisuals()
+        end,
+    })
+    visualTab:CreateToggle({
+        Name = "Safe Low-Poly Mode",
+        CurrentValue = false,
+        Flag = "NULLGUISafeLowPoly",
+        Callback = function(value)
+            controller.LowPoly = value == true
+            controller:RefreshLowPoly()
+        end,
+    })
+
+    visualTab:CreateSection("Cadence ESP")
+    visualTab:CreateToggle({
+        Name = "Cadence Cham ESP",
+        CurrentValue = false,
+        Flag = "NULLGUICadenceChamEsp",
+        Callback = function(value)
+            controller.Cadence.Cham = value == true
+        end,
+    })
+    visualTab:CreateToggle({
+        Name = "Cadence Arrow ESP",
+        CurrentValue = false,
+        Flag = "NULLGUICadenceArrowEsp",
+        Callback = function(value)
+            controller.Cadence.Arrow = value == true
+        end,
+    })
+    visualTab:CreateToggle({
+        Name = "Cadence Line ESP",
+        CurrentValue = false,
+        Flag = "NULLGUICadenceLineEsp",
+        Callback = function(value)
+            controller.Cadence.Line = value == true
+        end,
+    })
+    visualTab:CreateColorPicker({
+        Name = "Cham Fill Color",
+        Color = controller.Cadence.ChamFillColor,
+        Flag = "NULLGUICadenceChamFillColor",
+        Callback = function(value)
+            controller.Cadence.ChamFillColor = value
+        end,
+    })
+    visualTab:CreateColorPicker({
+        Name = "Cham Outline Color",
+        Color = controller.Cadence.ChamOutlineColor,
+        Flag = "NULLGUICadenceChamOutlineColor",
+        Callback = function(value)
+            controller.Cadence.ChamOutlineColor = value
+        end,
+    })
+    visualTab:CreateSlider({
+        Name = "Cham Fill Opacity",
+        Range = {0, 100},
+        Increment = 1,
+        CurrentValue = controller.Cadence.ChamFillOpacity,
+        Flag = "NULLGUICadenceChamFillOpacity",
+        Callback = function(value)
+            controller.Cadence.ChamFillOpacity = value
+        end,
+    })
+    visualTab:CreateSlider({
+        Name = "Cham Outline Opacity",
+        Range = {0, 100},
+        Increment = 1,
+        CurrentValue = controller.Cadence.ChamOutlineOpacity,
+        Flag = "NULLGUICadenceChamOutlineOpacity",
+        Callback = function(value)
+            controller.Cadence.ChamOutlineOpacity = value
+        end,
+    })
+    visualTab:CreateColorPicker({
+        Name = "Arrow ESP Color",
+        Color = controller.Cadence.ArrowColor,
+        Flag = "NULLGUICadenceArrowColor",
+        Callback = function(value)
+            controller.Cadence.ArrowColor = value
+        end,
+    })
+    visualTab:CreateSlider({
+        Name = "Arrow ESP Opacity",
+        Range = {0, 100},
+        Increment = 1,
+        CurrentValue = controller.Cadence.ArrowOpacity,
+        Flag = "NULLGUICadenceArrowOpacity",
+        Callback = function(value)
+            controller.Cadence.ArrowOpacity = value
+        end,
+    })
+    visualTab:CreateColorPicker({
+        Name = "Line ESP Color",
+        Color = controller.Cadence.LineColor,
+        Flag = "NULLGUICadenceLineColor",
+        Callback = function(value)
+            controller.Cadence.LineColor = value
+        end,
+    })
+    visualTab:CreateSlider({
+        Name = "Line ESP Opacity",
+        Range = {0, 100},
+        Increment = 1,
+        CurrentValue = controller.Cadence.LineOpacity,
+        Flag = "NULLGUICadenceLineOpacity",
+        Callback = function(value)
+            controller.Cadence.LineOpacity = value
+        end,
+    })
+end)()
+
+local function safeFind(root, path)
+    local current = root
+
+    for _, name in ipairs(path) do
+        if not current then return nil end
+        current = current:FindFirstChild(name)
+    end
+
+    return current
+end
+
+local function getChar(player)
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local function getHuman(char)
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRoot(char, humanoid)
+    if not char then return nil end
+    if not humanoid then humanoid = getHuman(char) end
+    return char:FindFirstChild("HumanoidRootPart") or (humanoid and humanoid.RootPart), char:FindFirstChild("Hitbox")
+end
+
+local function isDead(target: Player? | Model?)
+    if target:IsA("Player") then
+        local char = target.Character
+        local humanoid: Humanoid = char and getHuman(char)
+        return char and (humanoid and (humanoid:GetState() == Enum.HumanoidStateType.Dead or humanoid.Health <= 0))
+            or char == nil
+    elseif target:IsA("Model") then
+        local humanoid = target and getHuman(target)
+        return humanoid and (humanoid:GetState() == Enum.HumanoidStateType.Dead or humanoid.Health <= 0)
+            or target == nil
+    else
+        return target == nil
+    end
+end
+
+(function()
+local environment = getgenv and getgenv() or _G
+local diedRemote = events:FindFirstChild("Died")
+local diedFunction = events:FindFirstChild("DiedFunc")
+local notifyRemote = events:FindFirstChild("Notify")
+local inRound = ReplicatedStorage:FindFirstChild("InRound")
+local speakingRemote = ReplicatedStorage:FindFirstChild("VoiceChat")
+    and ReplicatedStorage.VoiceChat:FindFirstChild("SpeakingEvent")
+local celestialControllerRegistry = environment.CelestialVisibleHarmlessControllers
+local celestialNamecallDispatcher = environment.CelestialVisibleHarmlessNamecallDispatcher
+
+if type(celestialNamecallDispatcher) ~= "table" or celestialNamecallDispatcher.Game ~= game then
+    celestialNamecallDispatcher = {
+        Game = game,
+        Installed = false,
+        ActiveController = nil,
+        Filter = nil,
+    }
+    environment.CelestialVisibleHarmlessNamecallDispatcher = celestialNamecallDispatcher
+end
+
+celestialIntegration.Controller = {
+    Version = 11,
+    Enabled = false,
+    AutoEnableOnShieldBreak = true,
+    GiftCounterEnabled = true,
+    GiftCounterGui = nil,
+    Destroyed = false,
+    ShieldTriggers = 0,
+    BlockedClientEvents = 0,
+    BlockedDeathReports = 0,
+    Connections = {},
+    UpdatePositionReceivers = {},
+    RealityBreakGuards = {},
+    EnemySafety = {
+        AutoStopOperator = false,
+        AutoStopMalfunction = false,
+        OperatorCancelWithSharkTail = false,
+        OperatorSharkTailCancelDelay = 0,
+        OperatorCancelWithJump = false,
+        MalfunctionCancelWithSharkTail = false,
+        MalfunctionSharkTailCancelDelay = 0,
+        MalfunctionCancelWithJump = false,
+        AutoUseKolonaAbility = false,
+        AutoDisableRealityBreak = false,
+        AbilityInput = "MouseButton1",
+        OperatorIdleDelay = 1,
+        OperatorAbilityDelay = 2,
+        OperatorStopDuration = 0.2,
+        MalfunctionIdleDelay = 0.05,
+        MalfunctionAbilityDelay = 0.05,
+        MalfunctionStopDuration = 0.05,
+        KolonaAbilityDelay = 0,
+        KolonaAbilityDuration = 0.05,
+        MalfunctionDetections = 0,
+        OperatorDetections = 0,
+        StopsPerformed = 0,
+        KolonaDetections = 0,
+        KolonaTickWatchers = 0,
+        NativeAbilityCalls = 0,
+        FallbackAbilityCalls = 0,
+        SharkTailCancelAttempts = 0,
+        SharkTailCancels = 0,
+        LastSharkTailRoute = "None",
+        AutoLookAwayVoidbreaker = false,
+        Friendly = {
+            guardian = false,
+            operator = false,
+            voidbreaker = false,
+            kolona = false,
+            scrapmaw = false,
+            shadowguardian = false,
+            realitybreak = false
+        },
+        BlockedDeathReports = 0
+    },
+    LookAwayBindingName = "NULLGUIVoidbreakerLookAway"
+}
+
+environment.CelestialVisibleHarmlessController = celestialIntegration.Controller
+celestialControllerRegistry[celestialIntegration.Controller] = true
+
+local function isCelestialName(name)
+    local lowerName = string.lower(name)
+    return lowerName == "celestial"
+        or lowerName == "moth"
+        or lowerName:find("celestial", 1, true) ~= nil
+end
+
+local function isInsideCelestial(instance)
+    local currentInstance = instance
+
+    while currentInstance and currentInstance ~= workspace do
+        if isCelestialName(currentInstance.Name) then
+            local ancestor = currentInstance
+            while ancestor do
+                if ancestor == enemies then
+                    return true
+                end
+                ancestor = ancestor.Parent
+            end
+            return false
+        end
+
+        currentInstance = currentInstance.Parent
+    end
+
+    return false
+end
+
+local function isCelestialClientEvent(remote)
+    return typeof(remote) == "Instance"
+        and remote.ClassName == "RemoteEvent"
+        and remote.Name == "ClientEvent"
+        and isInsideCelestial(remote.Parent)
+end
+
+local function isCelestialDeathCause(value)
+    return typeof(value) == "string" and string.lower(value) == "celestial"
+end
+
+local function shouldBlockCelestialRemote(remote, methodName, arguments)
+    if celestialIntegration.Controller.Destroyed then
+        return false
+    end
+
+    if remote == speakingRemote
+        and methodName == "FireServer"
+        and typeof(arguments[1]) == "boolean" then
+        return true
+    end
+
+    local isDeathRemote = remote == diedRemote and methodName == "FireServer"
+    local isDeathFunction = remote == diedFunction and methodName == "InvokeServer"
+
+    if (isDeathRemote or isDeathFunction) and typeof(arguments[1]) == "string" then
+        local deathCause = string.lower(arguments[1])
+        if celestialIntegration.Controller.EnemySafety.Friendly[deathCause] then
+            celestialIntegration.Controller.EnemySafety.BlockedDeathReports += 1
+            return true
+        end
+    end
+
+    if not celestialIntegration.Controller.Enabled then
+        return false
+    end
+
+    if (isDeathRemote or isDeathFunction) and isCelestialDeathCause(arguments[1]) then
+        celestialIntegration.Controller.BlockedDeathReports += 1
+        return true
+    end
+
+    if methodName ~= "FireServer" or not isCelestialClientEvent(remote) then
+        return false
+    end
+
+    if arguments[1] == "Kill" then
+        celestialIntegration.Controller.BlockedClientEvents += 1
+        return true
+    end
+
+    return false
+end
+
+local function installCelestialNamecallFilter()
+    celestialNamecallDispatcher.ActiveController = celestialIntegration.Controller
+    celestialNamecallDispatcher.Filter = shouldBlockCelestialRemote
+
+    if celestialNamecallDispatcher.Installed then
+        return true
+    end
+
+    if not hookmetamethod or not getnamecallmethod or not newcclosure then
+        return false
+    end
+
+    local originalNamecall
+    originalNamecall = hookmetamethod(game, "__namecall", newcclosure(function(remote, ...)
+        local methodName = getnamecallmethod()
+        local arguments = table.pack(...)
+        local activeController = celestialNamecallDispatcher.ActiveController
+        local activeFilter = celestialNamecallDispatcher.Filter
+
+        if activeController and not activeController.Destroyed and type(activeFilter) == "function" then
+            local filterSucceeded, shouldBlock, blockedReturnValue = pcall(activeFilter, remote, methodName, arguments)
+
+            if filterSucceeded and shouldBlock then
+                return blockedReturnValue
+            end
+        end
+
+        return originalNamecall(remote, ...)
+    end))
+
+    celestialNamecallDispatcher.Installed = true
+    celestialNamecallDispatcher.OriginalNamecall = originalNamecall
+    return true
+end
+
+function celestialIntegration.Controller:RefreshSafetyFilter()
+    celestialNamecallDispatcher.ActiveController = self
+    celestialNamecallDispatcher.Filter = shouldBlockCelestialRemote
+    return celestialNamecallDispatcher.Installed == true
+end
+
+function celestialIntegration.Controller:SetEnabled(value)
+    self.Enabled = value == true and not self.Destroyed
+end
+
+function celestialIntegration.Controller:SetSafetyToggle(value)
+    if celestialIntegration.SafetyToggle and type(celestialIntegration.SafetyToggle.Set) == "function" then
+        celestialIntegration.SafetyToggle:Set(value == true)
+        return
+    end
+
+    self:SetEnabled(value)
+end
+
+function celestialIntegration.Controller:DisconnectAll()
+    for _, connection in ipairs(self.Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    table.clear(self.Connections)
+end
+
+;(function()
+local enemyReactionState = {
+    OperatorWasActive = false,
+    OperatorActivation = 0,
+    OperatorStartSound = nil,
+    OperatorStartConnection = nil,
+    LastOperatorTrigger = 0,
+    MalfunctionAlert = nil,
+    MalfunctionAlertConnection = nil,
+    MalfunctionAlertWasActive = false,
+    LastMalfunctionTrigger = 0,
+    AbilityController = nil,
+    ForcedAbilityHumanoid = nil,
+    KolonaWasActive = false,
+    KolonaActivation = 0,
+    KolonaTarget = nil,
+    KolonaPreviousNumber = nil,
+    KolonaTargetSound = nil,
+    KolonaTargetSoundConnection = nil,
+    KolonaWindowCharacter = nil,
+    KolonaWindowFunction = nil,
+    KolonaWindowWasOpen = false,
+    KolonaTickConnections = {},
+    KolonaCountStarted = false,
+    KolonaTriggered = false
+}
+
+local enemyAttackWindows = {
+    Operator = 3,
+    Malfunction = 0.5,
+    Kolona = 0.3
+}
+
+local abilityReleaseSettleTimeout = 0.15
+local minimumMalfunctionStopDuration = 0.05
+
+local function clampReactionDelay(delay, window, actionDuration, settleDuration)
+    local latestSafeDelay = math.max(window - actionDuration - (settleDuration or 0), 0)
+    return math.clamp(delay, 0, latestSafeDelay)
+end
+
+local function getCharacterControlParts()
+    local character = plr.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    return humanoid, rootPart
+end
+
+local function sendConfiguredAbilityInput(isPressed)
+    local inputName = celestialIntegration.Controller.EnemySafety.AbilityInput
+
+    if inputName == "MouseButton1" then
+        local mousePosition = UserInputService:GetMouseLocation()
+        VirtualInputManager:SendMouseButtonEvent(
+            mousePosition.X,
+            mousePosition.Y,
+            0,
+            isPressed,
+            game,
+            0
+        )
+        return
+    end
+
+    local keyCode = Enum.KeyCode[inputName]
+    if keyCode then
+        VirtualInputManager:SendKeyEvent(isPressed, keyCode, false, game)
+    end
+end
+
+local function getAbilityController()
+    local cachedController = enemyReactionState.AbilityController
+    local humanoid = getCharacterControlParts()
+
+    local function isUsableMovementController(candidate)
+        local inspected, candidateHumanoid, specialAction, activeSpecial = pcall(function()
+            return candidate.Humanoid, candidate.SpecialAction, candidate.ActiveSpecial
+        end)
+        local abilityUi = inspected and activeSpecial and activeSpecial.UI
+        return type(candidate) == "table"
+            and inspected
+            and candidateHumanoid == humanoid
+            and type(specialAction) == "function"
+            and typeof(abilityUi) == "Instance"
+            and abilityUi.Parent ~= nil
+            and abilityUi:FindFirstChild("Frame") ~= nil
+    end
+
+    if isUsableMovementController(cachedController) then
+        return cachedController
+    end
+
+    enemyReactionState.AbilityController = nil
+    local connectionGetter = getconnections or get_signal_cons
+    local upvalueGetter = getupvalues or (debug and debug.getupvalues)
+    if not humanoid
+        or type(connectionGetter) ~= "function"
+        or type(upvalueGetter) ~= "function" then
+        return nil
+    end
+
+    local readConnections, connections = pcall(
+        connectionGetter,
+        UserInputService.LastInputTypeChanged
+    )
+    if not readConnections then
+        return nil
+    end
+
+    for _, connection in ipairs(connections) do
+        local callback = connection.Function
+        if type(callback) == "function" then
+            local readUpvalues, upvalues = pcall(upvalueGetter, callback)
+            if readUpvalues then
+                for _, candidate in pairs(upvalues) do
+                    if isUsableMovementController(candidate) then
+                        enemyReactionState.AbilityController = candidate
+                        return candidate
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+local function useNativeAbilityInput(inputState)
+    local abilityController = getAbilityController()
+    if not abilityController then
+        return false
+    end
+
+    local invokedSuccessfully, invokedNative = pcall(function()
+        local movement = abilityController
+        local isEnding = inputState == Enum.UserInputState.End
+        local abilityWasActive = abilityController.Humanoid:GetAttribute("UsingAbility") == true
+            or movement.specialHeld == true
+            or movement.altSpecialHeld == true
+
+        movement.specialHeld = not isEnding
+        if isEnding then
+            movement.altSpecialHeld = false
+            movement.jumpPressed = false
+            movement.sprintHeld = false
+        end
+
+        if isEnding and not abilityWasActive then
+            return false
+        end
+
+        movement:SpecialAction(inputState)
+        if isEnding and type(movement.AltSpecialAction) == "function" then
+            movement:AltSpecialAction(inputState)
+        end
+        return true
+    end)
+
+    if invokedSuccessfully and invokedNative then
+        celestialIntegration.Controller.EnemySafety.NativeAbilityCalls += 1
+    end
+    return invokedSuccessfully
+end
+
+local function trySharkTailCancel(movement)
+    local safety = celestialIntegration.Controller.EnemySafety
+    safety.SharkTailCancelAttempts += 1
+
+    if type(movement) ~= "table" or type(movement.HasUpgrade) ~= "function" then
+        return false
+    end
+
+    local checkedUpgrade, hasSharkTail = pcall(movement.HasUpgrade, movement, "SharkTail")
+    if not checkedUpgrade or hasSharkTail ~= true then
+        return false
+    end
+
+    local activeSpecial = movement.ActiveSpecial
+    if type(activeSpecial) ~= "table" then
+        return false
+    end
+
+    local route
+    local cancelled
+    if movement.SpecialID == "Charger" and type(movement.SpecialAction) == "function" then
+        if movement.charging == true and movement.chargeSlowing ~= true then
+            local releaseState = movement.toggleAbility == true
+                and Enum.UserInputState.Begin or Enum.UserInputState.End
+            pcall(movement.SpecialAction, movement, releaseState)
+        end
+        if movement.chargeSlowing == true then
+            route = "ChargerReleaseThenSecondPress"
+            cancelled = pcall(
+                movement.SpecialAction,
+                movement,
+                Enum.UserInputState.Begin
+            )
+        end
+    elseif movement.diving == true and type(movement.SpecialAction) == "function" then
+        route = "DiveSecondPress"
+        cancelled = pcall(movement.SpecialAction, movement, Enum.UserInputState.Begin)
+    elseif movement.SpecialID == "Grapple"
+        and movement.grappling == true
+        and activeSpecial.grappleReel == true
+        and type(movement.AltSpecialAction) == "function"
+        and type(movement.SpecialAction) == "function" then
+        route = "GrappleReelSecondPress"
+        local releasedAlt = pcall(
+            movement.AltSpecialAction,
+            movement,
+            Enum.UserInputState.End
+        )
+        if releasedAlt and activeSpecial.allowSharkTail == true then
+            cancelled = pcall(
+                movement.SpecialAction,
+                movement,
+                Enum.UserInputState.Begin
+            )
+        end
+    elseif movement.SpecialID == "Grapple"
+        and activeSpecial.allowSharkTail == true
+        and activeSpecial.sharkTailDisable ~= true
+        and type(movement.SpecialAction) == "function" then
+        route = "GrappleSecondPress"
+        cancelled = pcall(movement.SpecialAction, movement, Enum.UserInputState.Begin)
+    end
+
+    if cancelled then
+        safety.SharkTailCancels += 1
+        safety.LastSharkTailRoute = route
+        return true
+    end
+    return false
+end
+
+local function isAbilityControllerActive(movement)
+    local readState, active = pcall(function()
+        if type(movement) ~= "table" then
+            return false
+        end
+
+        local activeSpecial = movement.ActiveSpecial
+        local humanoid = movement.Humanoid
+        return movement.charging == true
+            or movement.chargeSlowing == true
+            or movement.diving == true
+            or movement.grappling == true
+            or (activeSpecial and activeSpecial.grappleReel == true)
+            or (activeSpecial and activeSpecial.allowSharkTail == true)
+            or (humanoid and humanoid:GetAttribute("UsingAbility") == true)
+    end)
+    return readState and active
+end
+
+local function canCancelWithSharkTail(movement)
+    if not isAbilityControllerActive(movement)
+        or type(movement.HasUpgrade) ~= "function" then
+        return false
+    end
+
+    local activeSpecial = movement.ActiveSpecial
+    local hasSupportedState = movement.SpecialID == "Charger"
+        or movement.diving == true
+        or (movement.SpecialID == "Grapple" and (
+            movement.grappling == true
+            or (activeSpecial and activeSpecial.allowSharkTail == true)
+        ))
+    if not hasSupportedState then
+        return false
+    end
+
+    local checkedUpgrade, hasSharkTail = pcall(
+        movement.HasUpgrade,
+        movement,
+        "SharkTail"
+    )
+    return checkedUpgrade and hasSharkTail == true
+end
+
+local function releaseAbility(cancelMethods)
+    cancelMethods = type(cancelMethods) == "table" and cancelMethods or {}
+    local movement = getAbilityController()
+
+    if cancelMethods.SharkTail and isAbilityControllerActive(movement) then
+        trySharkTailCancel(movement)
+    end
+
+    if cancelMethods.Jump and isAbilityControllerActive(movement)
+        and type(movement.JumpButton) == "function" then
+        pcall(movement.JumpButton, movement, Enum.UserInputState.Begin)
+        pcall(movement.JumpButton, movement, Enum.UserInputState.End)
+    end
+
+    local usedNativeInput = useNativeAbilityInput(Enum.UserInputState.End)
+    if not usedNativeInput then
+        celestialIntegration.Controller.EnemySafety.FallbackAbilityCalls += 1
+        sendConfiguredAbilityInput(false)
+    end
+
+    local forcedHumanoid = enemyReactionState.ForcedAbilityHumanoid
+    if forcedHumanoid and forcedHumanoid.Parent then
+        forcedHumanoid:SetAttribute("UsingAbility", false)
+    end
+    enemyReactionState.ForcedAbilityHumanoid = nil
+
+    local humanoid = getCharacterControlParts()
+    if humanoid then
+        humanoid:SetAttribute("UsingAbility", false)
+        humanoid:SetAttribute("Sliding", false)
+    end
+end
+
+local function beginAbility()
+    local usedNativeInput = useNativeAbilityInput(Enum.UserInputState.Begin)
+    if not usedNativeInput then
+        celestialIntegration.Controller.EnemySafety.FallbackAbilityCalls += 1
+        sendConfiguredAbilityInput(true)
+    end
+
+    return usedNativeInput
+end
+
+local autoStopController = (function()
+    local AutoStopController = {}
+    AutoStopController.__index = AutoStopController
+
+    local DEFAULT_RELEASE_KEYS = {
+        Enum.KeyCode.W,
+        Enum.KeyCode.A,
+        Enum.KeyCode.S,
+        Enum.KeyCode.D,
+        Enum.KeyCode.Space,
+        Enum.KeyCode.LeftShift,
+        Enum.KeyCode.E,
+        Enum.KeyCode.Q,
+    }
+
+    local function safeCall(callback, ...)
+        if type(callback) ~= "function" then
+            return false
+        end
+
+        return pcall(callback, ...)
+    end
+
+    local function readProperty(instance, propertyName)
+        if not instance then
+            return nil
+        end
+
+        local success, value = pcall(function()
+            return instance[propertyName]
+        end)
+        return success and value or nil
+    end
+
+    function AutoStopController.new(dependencies)
+        dependencies = dependencies or {}
+
+        return setmetatable({
+            Dependencies = dependencies,
+            Generation = 0,
+            ScheduleGeneration = 0,
+            Active = false,
+            Deadline = 0,
+            HeartbeatConnection = nil,
+            Snapshot = nil,
+            Controls = nil,
+            AbilityReleased = false,
+            InputNeutralBindingName = "NULLGUIAutoStopInputNeutral",
+        }, AutoStopController)
+    end
+
+    function AutoStopController:GetParts()
+        local getter = self.Dependencies.GetParts
+        if type(getter) ~= "function" then
+            return nil, nil
+        end
+
+        local success, humanoid, rootPart = pcall(getter)
+        if not success then
+            return nil, nil
+        end
+
+        return humanoid, rootPart
+    end
+
+    function AutoStopController:GetControls()
+        if self.Controls then
+            return self.Controls
+        end
+
+        local getter = self.Dependencies.GetControls
+        if type(getter) ~= "function" then
+            return nil
+        end
+
+        local success, controls = pcall(getter)
+        if success and type(controls) == "table" then
+            self.Controls = controls
+            return controls
+        end
+
+        return nil
+    end
+
+    function AutoStopController:ReleaseKeys()
+        local virtualInputManager = self.Dependencies.VirtualInputManager
+        local userInputService = self.Dependencies.UserInputService
+        if not virtualInputManager then
+            return
+        end
+
+        local keysToRelease = {}
+        local queuedKeys = {}
+        local function queueKey(keyCode)
+            if keyCode == Enum.KeyCode.Thumbstick1
+                or keyCode == Enum.KeyCode.Thumbstick2 then
+                return
+            end
+
+            if typeof(keyCode) == "EnumItem"
+                and keyCode ~= Enum.KeyCode.Unknown
+                and not queuedKeys[keyCode] then
+                queuedKeys[keyCode] = true
+                table.insert(keysToRelease, keyCode)
+            end
+        end
+
+        for _, keyCode in ipairs(self.Dependencies.ReleaseKeys or DEFAULT_RELEASE_KEYS) do
+            queueKey(keyCode)
+        end
+
+        if userInputService then
+            local readKeys, pressedKeys = pcall(userInputService.GetKeysPressed, userInputService)
+            if readKeys then
+                for _, inputObject in ipairs(pressedKeys) do
+                    queueKey(inputObject.KeyCode)
+                end
+            end
+
+            local readGamepads, connectedGamepads = pcall(
+                userInputService.GetConnectedGamepads,
+                userInputService
+            )
+            if readGamepads then
+                for _, gamepad in ipairs(connectedGamepads) do
+                    local readState, gamepadState = pcall(
+                        userInputService.GetGamepadState,
+                        userInputService,
+                        gamepad
+                    )
+                    if readState then
+                        for _, inputObject in ipairs(gamepadState) do
+                            if inputObject.UserInputState ~= Enum.UserInputState.End then
+                                queueKey(inputObject.KeyCode)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        for _, keyCode in ipairs(keysToRelease) do
+            safeCall(function()
+                virtualInputManager:SendKeyEvent(false, keyCode, false, game)
+            end)
+        end
+
+        safeCall(function()
+            if not userInputService then
+                return
+            end
+
+            local mousePosition = userInputService:GetMouseLocation()
+            for buttonIndex = 0, 2 do
+                virtualInputManager:SendMouseButtonEvent(
+                    mousePosition.X,
+                    mousePosition.Y,
+                    buttonIndex,
+                    false,
+                    game,
+                    0
+                )
+            end
+        end)
+    end
+
+    function AutoStopController:ReleaseAbility(cancelMethods)
+        self:ReleaseKeys()
+        safeCall(self.Dependencies.ReleaseAbility, cancelMethods)
+        safeCall(self.Dependencies.ReleaseMovementInput)
+
+        local humanoid = self:GetParts()
+        if humanoid then
+            safeCall(function()
+                humanoid:SetAttribute("UsingAbility", false)
+                humanoid:SetAttribute("Sliding", false)
+                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
+            end)
+        end
+    end
+
+    function AutoStopController:Capture()
+        if self.Snapshot then
+            return
+        end
+
+        local controls = self:GetControls()
+        self.Snapshot = {
+            Controls = controls,
+            ControlsEnabled = readProperty(controls, "controlsEnabled"),
+        }
+    end
+
+    function AutoStopController:Apply(humanoid)
+        self:Capture()
+        if not self.AbilityReleased then
+            self:ReleaseAbility()
+            self.AbilityReleased = true
+        end
+
+        local controls = self:GetControls()
+        safeCall(function()
+            controls:Disable()
+        end)
+        safeCall(self.Dependencies.ReleaseMovementInput)
+
+        humanoid = humanoid or self:GetParts()
+        if humanoid then
+            safeCall(function()
+                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
+                humanoid:SetAttribute("UsingAbility", false)
+                humanoid:SetAttribute("Sliding", false)
+            end)
+        end
+
+        return true
+    end
+
+    function AutoStopController:Restore()
+        local snapshot = self.Snapshot
+        self.Snapshot = nil
+        self.Active = false
+        self.AbilityReleased = false
+
+        local runService = self.Dependencies.RunService
+        if runService then
+            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
+        end
+
+        if not snapshot then
+            self:ReleaseKeys()
+            return
+        end
+
+        if snapshot.Controls then
+            if snapshot.ControlsEnabled == false then
+                safeCall(function()
+                    snapshot.Controls:Disable()
+                end)
+            else
+                safeCall(function()
+                    snapshot.Controls:Enable()
+                end)
+            end
+        end
+
+        self:ReleaseKeys()
+        safeCall(self.Dependencies.OnRestored)
+    end
+
+    function AutoStopController:Finish()
+        self.Generation += 1
+        self.Deadline = 0
+
+        if self.HeartbeatConnection then
+            safeCall(function()
+                self.HeartbeatConnection:Disconnect()
+            end)
+            self.HeartbeatConnection = nil
+        end
+
+        self:Restore()
+    end
+
+    function AutoStopController:Cancel()
+        self.ScheduleGeneration += 1
+        self:Finish()
+    end
+
+    function AutoStopController:StopFor(duration, abilityAlreadyReleased)
+        duration = math.max(tonumber(duration) or 0, 0)
+        self.Generation += 1
+        local generation = self.Generation
+        self.Deadline = os.clock() + duration
+        self.Active = true
+        self.AbilityReleased = abilityAlreadyReleased == true
+
+        local runService = self.Dependencies.RunService
+        if runService then
+            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
+            runService:BindToRenderStep(
+                self.InputNeutralBindingName,
+                Enum.RenderPriority.Last.Value + 100,
+                function()
+                    if not self.Active then
+                        return
+                    end
+
+                    safeCall(self.Dependencies.ReleaseMovementInput)
+                    local currentHumanoid = self:GetParts()
+                    self:Apply(currentHumanoid)
+                end
+            )
+        end
+
+        if self.HeartbeatConnection then
+            safeCall(function()
+                self.HeartbeatConnection:Disconnect()
+            end)
+            self.HeartbeatConnection = nil
+        end
+
+        local humanoid = self:GetParts()
+        self:Apply(humanoid)
+        safeCall(self.Dependencies.OnStopped)
+
+        if runService and duration > 0 then
+            self.HeartbeatConnection = runService.Heartbeat:Connect(function()
+                if generation ~= self.Generation or not self.Active then
+                    return
+                end
+
+                if os.clock() >= self.Deadline then
+                    self:Finish()
+                    return
+                end
+
+                local currentHumanoid = self:GetParts()
+                self:Apply(currentHumanoid)
+            end)
+        elseif duration <= 0 then
+            self:Finish()
+        end
+    end
+
+    function AutoStopController:WaitForAbilityRelease(scheduleGeneration)
+        local runService = self.Dependencies.RunService
+        if not runService then
+            return scheduleGeneration == self.ScheduleGeneration
+        end
+
+        local deadline = os.clock() + abilityReleaseSettleTimeout
+        repeat
+            runService.Heartbeat:Wait()
+
+            if scheduleGeneration ~= self.ScheduleGeneration
+                or celestialIntegration.Controller.Destroyed then
+                return false
+            end
+
+            safeCall(self.Dependencies.ReleaseMovementInput)
+            local humanoid = self:GetParts()
+            if not humanoid or humanoid:GetAttribute("UsingAbility") ~= true then
+                return true
+            end
+        until os.clock() >= deadline
+
+        return true
+    end
+
+    function AutoStopController:StopAfter(
+        delay,
+        duration,
+        activation,
+        getActivation,
+        cancelMethods
+    )
+        delay = math.max(tonumber(delay) or 0, 0)
+        duration = math.max(tonumber(duration) or 0, 0)
+        local scheduleGeneration = self.ScheduleGeneration
+
+        task.delay(delay, function()
+            if scheduleGeneration ~= self.ScheduleGeneration
+                or celestialIntegration.Controller.Destroyed then
+                return
+            end
+
+            if type(getActivation) == "function" and activation ~= nil then
+                local success, currentActivation = pcall(getActivation)
+                if not success or currentActivation ~= activation then
+                    return
+                end
+            end
+
+            self:ReleaseAbility(cancelMethods)
+            if not self:WaitForAbilityRelease(scheduleGeneration) then
+                return
+            end
+
+            self:StopFor(duration, true)
+        end)
+    end
+
+    function AutoStopController:Destroy()
+        self:Cancel()
+    end
+
+    return AutoStopController.new({
+        GetParts = getCharacterControlParts,
+        GetControls = function()
+            local playerScripts = plr:FindFirstChild("PlayerScripts")
+            local playerModuleScript = playerScripts and playerScripts:FindFirstChild("PlayerModule")
+            if not playerModuleScript then
+                return nil
+            end
+
+            local loaded, playerModule = pcall(require, playerModuleScript)
+            if not loaded or type(playerModule) ~= "table"
+                or type(playerModule.GetControls) ~= "function" then
+                return nil
+            end
+
+            return playerModule:GetControls()
+        end,
+        VirtualInputManager = VirtualInputManager,
+        UserInputService = UserInputService,
+        RunService = RunService,
+        ReleaseMovementInput = function()
+            local movement = getAbilityController()
+            local zero = Vector3.zero
+            local controlModule = movement and movement.ControlModule
+            if type(controlModule) ~= "table" then
+                local playerScripts = plr:FindFirstChild("PlayerScripts")
+                local playerModuleScript = playerScripts and playerScripts:FindFirstChild("PlayerModule")
+                if playerModuleScript then
+                    local loaded, playerModule = pcall(require, playerModuleScript)
+                    if loaded and type(playerModule) == "table"
+                        and type(playerModule.GetControls) == "function" then
+                        local foundControls, controls = pcall(playerModule.GetControls, playerModule)
+                        if foundControls then
+                            controlModule = controls
+                        end
+                    end
+                end
+            end
+
+            if type(controlModule) == "table" then
+                controlModule.inputMoveVector = zero
+
+                local activeController
+                if type(controlModule.GetActiveController) == "function" then
+                    local foundController, controller = pcall(
+                        controlModule.GetActiveController,
+                        controlModule
+                    )
+                    if foundController then
+                        activeController = controller
+                    end
+                else
+                    activeController = controlModule.activeController
+                end
+
+                if type(activeController) == "table" then
+                    activeController.moveVector = zero
+                    activeController.forwardValue = 0
+                    activeController.backwardValue = 0
+                    activeController.leftValue = 0
+                    activeController.rightValue = 0
+                    activeController.isJumping = false
+                end
+
+                if type(controlModule.moveFunction) == "function" then
+                    pcall(controlModule.moveFunction, plr, zero, true)
+                end
+            end
+
+            if movement then
+                movement.specialHeld = false
+                movement.altSpecialHeld = false
+                movement.jumpPressed = false
+                movement.sprintHeld = false
+                movement.PlayerMoveDirection = zero
+            end
+
+            local humanoid = movement and movement.Humanoid or getCharacterControlParts()
+            if humanoid and humanoid.Parent then
+                humanoid:SetAttribute("PlayerMoveDirection", zero)
+                humanoid:SetAttribute("UsingAbility", false)
+                humanoid:SetAttribute("Sliding", false)
+            end
+        end,
+        ReleaseAbility = releaseAbility,
+        OnStopped = function()
+            celestialIntegration.Controller.EnemySafety.StopsPerformed += 1
+        end,
+    })
+end)()
+
+local function restoreReactionInput()
+    autoStopController:Cancel()
+end
+
+local function releaseAndStop(delay, duration, cancelMethods)
+    autoStopController:StopAfter(delay, duration, nil, nil, cancelMethods)
+end
+
+local function getMalfunctionAlert()
+    local playerGui = plr:FindFirstChildOfClass("PlayerGui")
+    local operatorGui = playerGui and playerGui:FindFirstChild("OperatorGUI")
+    return operatorGui and operatorGui:FindFirstChild("VBAlert", true)
+end
+
+local function getOperatorStartSound()
+    local playerGui = plr:FindFirstChildOfClass("PlayerGui")
+    local operatorGui = playerGui and playerGui:FindFirstChild("OperatorGUI")
+    return operatorGui and operatorGui:FindFirstChild("Start", true)
+end
+
+local function getKolonaNumberLabel()
+    local playerGui = plr:FindFirstChildOfClass("PlayerGui")
+    local kolonaGui = playerGui and playerGui:FindFirstChild("Kolona")
+    local mainFrame = kolonaGui and kolonaGui:FindFirstChild("Main")
+    return mainFrame and mainFrame:FindFirstChild("Number", true)
+end
+
+local function triggerOperatorReaction()
+    local safety = celestialIntegration.Controller.EnemySafety
+    local currentTime = time()
+    if celestialIntegration.Controller.Destroyed
+        or not safety.AutoStopOperator
+        or currentTime - enemyReactionState.LastOperatorTrigger < 0.25 then
+        return
+    end
+
+    enemyReactionState.LastOperatorTrigger = currentTime
+    safety.OperatorDetections += 1
+    local movement = getAbilityController()
+    local abilityIsActive = isAbilityControllerActive(movement)
+    local configuredDelay = abilityIsActive
+        and safety.OperatorAbilityDelay
+ 
