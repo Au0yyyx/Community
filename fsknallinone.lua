@@ -555,7 +555,15 @@ local function statsFor(model, actorType)
                 EnragedCap = tonumber(config.EnragedStaminaCap),
                 EnragedCapTime = tonumber(config.EnragedStaminaCapLerpTime),
                 EnragedSpeed = tonumber(config.EnragedSpeed),
+                RunAnimationIds = {},
             }
+            for animationName, animationId in pairs(config.Animations or {}) do
+                local lower = string.lower(tostring(animationName))
+                if lower == "run" or lower == "injuredrun" then
+                    local id = tostring(animationId):match("%d+")
+                    if id then defaults.RunAnimationIds[id] = true end
+                end
+            end
         end
     end
     -- Azure's Golem is a form swap inside Azure rather than its own asset config.
@@ -648,11 +656,14 @@ local function sprintState(tracker, humanoid, actorState, now)
         if animator then
             for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                 local name = string.lower(track.Name)
+                local animationId = track.Animation and tostring(track.Animation.AnimationId):match("%d+")
                 if track.WeightCurrent > 0.15 and name:find("enraged", 1, true) then
                     tracker.EnragedAnimation = true
                 end
                 if track.WeightCurrent > 0.15
-                    and (name:find("sprint", 1, true) or name:find("run", 1, true)) then
+                    and (name:find("sprint", 1, true) or name:find("run", 1, true)
+                        or (animationId and tracker.Stats.RunAnimationIds
+                            and tracker.Stats.RunAnimationIds[animationId])) then
                     tracker.SprintAnimation = true
                     break
                 end
@@ -855,7 +866,7 @@ print("[Forsaken Stamina Tracker V2] Loaded - role-aware")
                 assert(type(Environment.__ForsakenStaminaTrackerV2) == "table", "tracker did not initialize")
             end)
             if ok then
-                trackerStatus:SetText("Status: Active (state-aware v5)")
+                trackerStatus:SetText("Status: Active (state-aware v6)")
             else
                 trackerStatus:SetText("Status: Failed")
                 warn("[Forsaken Suite] Stamina tracker failed:", loadError)
