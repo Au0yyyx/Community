@@ -474,6 +474,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
+local StatsService = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local Actors = require(ReplicatedStorage.Modules.Gameplay.Actors)
 local Env = getgenv and getgenv() or _G
@@ -484,7 +485,7 @@ for _, oldKey in ipairs({"__ForsakenKillerStaminaV1", KEY}) do
     if type(old) == "table" and type(old.Destroy) == "function" then pcall(old.Destroy, old) end
 end
 
-local App = {Connections = {}, Trackers = {}, Destroyed = false, Role = "Unknown"}
+local App = {Connections = {}, Trackers = {}, Destroyed = false, Role = "Unknown", PingSeconds = 0.08, LastPingRead = 0}
 Env[KEY] = App
 
 local function connect(signal, fn)
@@ -527,12 +528,23 @@ local function statsFor(model, actorType)
     local defaults = actorType == "Killer"
         and {Max = 110, Loss = 9.5, Gain = 21, Walk = 9, Sprint = 27}
         or {Max = 100, Loss = 10, Gain = 20, Walk = 12, Sprint = 26}
+    -- Prefer the live actor's Config table. This is the game's current runtime
+    -- data and correctly handles skins/forms whose model name does not match
+    -- an Assets folder. Asset modules are fallback only.
+    local liveConfig
+    for _, actor in pairs(Actors.CurrentActors) do
+        if actor.Rig == model and type(actor.Config) == "table" then
+            liveConfig = actor.Config
+            break
+        end
+    end
     local assets = ReplicatedStorage:FindFirstChild("Assets")
     local folder = assets and assets:FindFirstChild(actorType .. "s")
     folder = folder and (folder:FindFirstChild(name) or folder:FindFirstChild(model.Name))
     local configModule = folder and folder:FindFirstChild("Config")
-    if configModule and configModule:IsA("ModuleScript") then
-        local ok, config = pcall(require, configModule)
+    if liveConfig or (configModule and configModule:IsA("ModuleScript")) then
+        local ok, config = true, liveConfig
+        if not config then ok, config = pcall(require, configModule) end
         if ok and type(config) == "table" then
             defaults = {
                 Max = tonumber(config.MaxStamina) or defaults.Max,
@@ -614,6 +626,7 @@ local function newTracker(model, actorType)
         Enraged = false, EnragedSince = 0,
         WasSprinting = false, RecoveryDelay = 0,
         LastAnimCheck = 0, SprintAnimation = false, EnragedAnimation = false,
+        LastSprintEvidence = 0,
         NearestDistance = math.huge, PathDistance = math.huge, LastGateScan = 0,
         Gui = gui, Fill = fill, Label = label, Detail = detail,
     }
@@ -722,6 +735,12 @@ connect(RunService.Heartbeat, function(dt)
     end
 
     local now = os.clock()
+    if now - App.LastPingRead >= 1 then
+        App.LastPingRead = now
+        pcall(function()
+            App.PingSeconds = math.clamp(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000, 0.02, 1.5)
+        end)
+    end
     for model, t in pairs(App.Trackers) do
         local root = rootOf(model)
         if root then
@@ -748,6 +767,16 @@ connect(RunService.Heartbeat, function(dt)
             -- Raging Pace disables sprinting. Its fixed EnragedSpeed must never
             -- be mistaken for normal stamina drain.
             local sprinting = not enraged and sprintState(t, humanoidOf(model), state, now)
+            if sprinting then
+                t.LastSprintEvidence = now
+            elseif t.SprintAnimation then
+                -- During a replication stall position remains frozen even
+                -- though the remote run animation keeps playing. Preserve the
+                -- last verified sprint for a ping-scaled grace window instead
+                -- of falsely starting regeneration.
+                local grace = math.clamp(App.PingSeconds * 2.25 + 0.12, 0.2, 1.5)
+                sprinting = now - t.LastSprintEvidence <= grace
+            end
             local draining = sprinting and t.DrainAllowed
             if draining then
                 t.Estimate = math.max(0, t.Estimate - t.Stats.Loss * dt)
@@ -826,7 +855,7 @@ print("[Forsaken Stamina Tracker V2] Loaded - role-aware")
                 assert(type(Environment.__ForsakenStaminaTrackerV2) == "table", "tracker did not initialize")
             end)
             if ok then
-                trackerStatus:SetText("Status: Active (state-aware v4)")
+                trackerStatus:SetText("Status: Active (state-aware v5)")
             else
                 trackerStatus:SetText("Status: Failed")
                 warn("[Forsaken Suite] Stamina tracker failed:", loadError)
