@@ -41,7 +41,10 @@ local function difficulty()
 end
 local function party(players)
  if App.PartyOverride then return App.PartyOverride end
- return players==1 and "solo"or(players==2 and "duo"or(players>8 and "party-plus"or "party"))
+ -- Party size and current attendance are separate calculator inputs. A
+ -- Party+ lobby can temporarily contain eight or fewer players.
+ if Players.MaxPlayers>8 then return "party-plus"end
+ return Players.MaxPlayers==1 and "solo"or(Players.MaxPlayers==2 and "duo"or "party")
 end
 local function nothingActive()
  if App.NothingOverride~=nil then return App.NothingOverride end
@@ -131,9 +134,12 @@ local f=Instance.new("Frame");f.Size=UDim2.fromOffset(520,360);f.Position=UDim2.
 local st=Instance.new("UIStroke",f);st.Color=Color3.fromRGB(94,215,255);st.Thickness=2
 local function text(y,h,size,color,font)local l=Instance.new("TextLabel");l.BackgroundTransparency=1;l.Position=UDim2.fromOffset(14,y);l.Size=UDim2.new(1,-28,0,h);l.Font=font or Enum.Font.Code;l.TextSize=size;l.TextColor3=color;l.TextWrapped=true;l.TextXAlignment=Enum.TextXAlignment.Left;l.TextYAlignment=Enum.TextYAlignment.Top;l.Parent=f;return l end
 local title=text(10,28,19,Color3.fromRGB(110,225,255),Enum.Font.GothamBold);title.Text="NULLSCAPE // SHOP CALCULATOR AI"
+local partyButton=Instance.new("TextButton");partyButton.Size=UDim2.fromOffset(112,25);partyButton.Position=UDim2.new(1,-124,0,8);partyButton.BackgroundColor3=Color3.fromRGB(24,43,57);partyButton.TextColor3=Color3.fromRGB(135,230,255);partyButton.Font=Enum.Font.GothamBold;partyButton.TextSize=11;partyButton.Text="PARTY: AUTO";partyButton.Parent=f;Instance.new("UICorner",partyButton).CornerRadius=UDim.new(0,6)
 local stats=text(42,24,13,Color3.fromRGB(205,215,230));local best=text(75,98,15,Color3.fromRGB(125,255,160),Enum.Font.GothamBold)
 local ranked=text(178,155,13,Color3.fromRGB(235,235,245));local foot=text(336,18,11,Color3.fromRGB(145,155,175));foot.Text="RightShift hide • live data from Sticks' calculator • recommendations only"
 local hidden=false;local function con(sig,fn)local c=sig:Connect(fn);App.Connections[#App.Connections+1]=c;return c end
+local partyModes={false,"solo","duo","party","party-plus"};local partyModeIndex=1
+con(partyButton.MouseButton1Click,function()partyModeIndex=partyModeIndex%#partyModes+1;App.PartyOverride=partyModes[partyModeIndex]or nil;partyButton.Text="PARTY: "..(App.PartyOverride and App.PartyOverride:upper()or "AUTO")end)
 con(UIS.InputBegan,function(i,p)if not p and i.KeyCode==Enum.KeyCode.RightShift then hidden=not hidden;f.Visible=not hidden end end)
 task.spawn(function()while not App.Destroyed do local s,choices,basket,spent=calculate()
  stats.Text=string.format("LEVEL %d  •  %d PLAYER(S)  •  %s/%s  •  %.0f GG%s",s.level,s.players,s.difficulty,s.party,s.money,s.nothing and "  •  NOTHING? -15%"or "")
