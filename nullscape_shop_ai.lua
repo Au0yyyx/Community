@@ -110,9 +110,11 @@ end
 local function calculate()
  local s=settings();local choices={}
  for _,u in ipairs(Upgrades)do local own=s.owned[u.name]or 0
-  if eligible(u,s,own)then for n=own+1,(u.max or 1)do
-   local c=cost(u,s,n-1);choices[#choices+1]={u=u,stack=n,cost=c,score=utility(u,s,n),ratio=utility(u,s,n)/math.max(c,1)}
-  end end
+  -- Only expose the immediately purchasable stack. Treating later stacks as
+  -- independent knapsack entries can recommend stack 5 without buying stack 4.
+  if eligible(u,s,own)then local n=own+1
+   local c=cost(u,s,own);choices[#choices+1]={u=u,stack=n,cost=c,score=utility(u,s,n),ratio=utility(u,s,n)/math.max(c,1)}
+  end
  end
  table.sort(choices,function(a,b)return a.score>b.score end)
  -- Exact bounded knapsack for the best set of upgrades at the current GG amount.
