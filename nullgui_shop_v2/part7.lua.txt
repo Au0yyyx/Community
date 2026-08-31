@@ -1,0 +1,507 @@
+                local availableGifts = availableNormalGifts
+                if #availableGifts == 0 then availableGifts = availableGoldenGifts end
+                local gift = getClosestGift(availableGifts)
+                if gift then
+                    root.Position = gift.Position
+                else
+                    root.Position = pos
+                    if notifOn then
+                        notif("No gift! Automatically doing Teleport to Spawn", "Anti Void")
+                    end
+                end
+            end
+
+            hitbox.Position = root.Position
+        end
+    end
+
+    if root and hitbox then
+        hitbox.Position = root.Position --teleporting hitbox and root together sometimes doesnt worK
+
+        if velov then
+            local velocity = root.AssemblyLinearVelocity * Vector3.new(1,0.5,1)
+            local speed = velocity.Magnitude
+
+            if speed > 0 then
+               local direction = velocity.Unit
+
+                local length = math.clamp(speed * 0.5, 0.5, 150)
+                local t = math.clamp(speed / 75, 0, 1)
+
+                local startPos = root.Position
+                local endPos = startPos + direction * length
+                local midPos = (startPos + endPos) / 2
+
+                velocityPart.Size = Vector3.new(0.2, 0.2, length)
+                velocityPart.CFrame = CFrame.lookAt(midPos, endPos)
+                velocityPart.Color = Color3.new(1, 1 - t, 1 - t)
+                velocityPart.Transparency = 0
+                vpBox.Size = velocityPart.Size
+                vpBox.Color3 = velocityPart.Color
+                vpBox.Transparency = 0.25
+            else
+                velocityPart.Transparency = 1
+                vpBox.Transparency = 1
+            end
+        end
+    end
+
+    if h then
+        if not h:HasTag("loop") then
+            h:AddTag("loop")
+            connections["walkloop"] = h:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+                local cs = h.WalkSpeed
+                if cs == ws or not ew then return end
+
+                h.WalkSpeed = ws
+            end)
+            
+            connections["jumploop"] = h:GetPropertyChangedSignal("JumpPower"):Connect(function()
+                local cp = h.JumpPower
+                if cp == jp or not ej then return end
+
+                h.JumpPower = jp
+            end)
+            
+        end
+    end
+
+    if nrb then
+        local rb = char:FindFirstChild("Razorbloom")
+        if rb then
+            rb:Destroy()
+            if notifOn then
+                notif("Razorbloom destroyed.", "Success")
+            end
+        end
+    end
+    
+    if nfb and beacons:FindFirstChild("BeaconMirage") then
+        for _, b in beacons:GetChildren() do
+            if b.Name == "BeaconMirage" then
+                b:Destroy()
+            end
+        end
+    end
+end)
+
+local lastUpdate = 0
+local RATE = 1/30
+
+local LV
+task.spawn(function()
+    local root = getRoot(getChar(plr))
+    LV = root:FindFirstChild("LV_NULLGUI")
+            if not LV then
+                LV = Instance.new("LinearVelocity")
+                LV.Name = "LV_NULLGUI"
+                LV.Attachment0 = root.RootAttachment
+                LV.RelativeTo = Enum.ActuatorRelativeTo.World
+                LV.MaxForce = math.huge
+                LV.VectorVelocity = Vector3.zero
+                LV.Enabled = false
+                LV.Parent = root
+            end
+
+    while task.wait() do
+        if gliderBoost then
+            root = getRoot(getChar(plr))
+            LV = root:FindFirstChild("LV_NULLGUI")
+
+            if not LV then
+                LV = Instance.new("LinearVelocity")
+                LV.Name = "LV_NULLGUI"
+                LV.Attachment0 = root.RootAttachment
+                LV.RelativeTo = Enum.ActuatorRelativeTo.World
+                LV.MaxForce = math.huge
+                LV.VectorVelocity = Vector3.zero
+                LV.Enabled = false
+                LV.Parent = root
+            end
+
+            Camera = workspace.CurrentCamera
+            local lookVector = Camera.CFrame.LookVector
+
+            if not isDead(plr) then
+                LV.Enabled = true
+                LV.VectorVelocity = lookVector * 100
+                local targetCF = CFrame.lookAt(
+			        root.Position,
+			        root.Position + lookVector
+		        )
+		        root.CFrame = root.CFrame:Lerp(targetCF, 0.15)
+            end
+        else
+            LV.Enabled = false
+            LV.VectorVelocity = Vector3.zero
+        end
+        
+        if destroying then
+            break
+        end
+    end
+end)
+
+RunService:BindToRenderStep("DRAWING", Enum.RenderPriority.Camera.Value + 1, function()
+    local plrdead = isDead(plr)
+
+    if plrdead then
+        return
+    end
+
+    local now = tick()
+    if now - lastUpdate < RATE then return end
+    lastUpdate = now
+    Camera = Camera or workspace.CurrentCamera
+
+
+    if cesp then
+        local gift = getClosestAnyGift()
+
+        if gift then
+            local screenPos, visible = Camera:WorldToViewportPoint(gift.Position)
+            local viewport = Camera.ViewportSize
+
+            local from = Vector2.new(viewport.X / 2, viewport.Y / 2)
+            local to
+            local camCF = Camera.CFrame
+            local camPos = camCF.Position
+            local camLook = camCF.LookVector
+            local direction = (gift.Position - camPos).Unit
+            local dot = camLook:Dot(direction)
+
+            if not gift:FindFirstChild("BoxHandleAdornment") then
+                local box = cgb or Instance.new("BoxHandleAdornment")
+                cgb = box
+                box.Size = gift.Size
+                box.Adornee = gift
+                box.AlwaysOnTop = true
+                box.ZIndex = 0
+                box.Color3 = Color3.new(1, 1, 0)
+                box.Transparency = 0.5
+                box.Parent = gift
+            end
+
+            if visible and dot > 0 then
+                to = Vector2.new(screenPos.X, screenPos.Y)
+            else
+                local x = math.clamp(screenPos.X, 0, viewport.X)
+                local y = math.clamp(screenPos.Y, 0, viewport.Y)
+
+                if dot < 0 then
+                    local center = Vector2.new(viewport.X/2, viewport.Y/2)
+                    local dir = (Vector2.new(screenPos.X, screenPos.Y) - center).Unit
+                    to = center + dir * math.max(viewport.X, viewport.Y)
+                else
+                    to = Vector2.new(x, y)
+                end
+            end
+
+            closestGiftTracer.Visible = true
+            closestGiftTracer.From = from
+            closestGiftTracer.To = to
+        else
+            closestGiftTracer.Visible = false
+            if cgb then
+                cgb.Transparency = 1
+            end
+        end
+    else
+        closestGiftTracer.Visible = false
+        if cgb then
+            cgb.Transparency = 1
+        end
+    end
+
+    if mesp then
+        local medalUpgrade = upgrades:FindFirstChild("Medal")
+
+        if medalUpgrade and medalUpgrade.Value == 1 then
+            local medal = beacons:FindFirstChild("Medal")
+
+            if medal then
+                local screenPos, visible = Camera:WorldToViewportPoint(medal.Position)
+                local viewport = Camera.ViewportSize
+
+                local from = Vector2.new(viewport.X / 2, viewport.Y / 2)
+                local to
+                local camCF = Camera.CFrame
+                local camPos = camCF.Position
+                local camLook = camCF.LookVector
+                local direction = (medal.Position - camPos).Unit
+                local dot = camLook:Dot(direction)
+
+                if not medal:FindFirstChild("BoxHandleAdornment") then
+                    local box = mb or Instance.new("BoxHandleAdornment")
+                    mb = box
+                    box.Size = medal.Size
+                    box.Adornee = medal
+                    box.AlwaysOnTop = true
+                    box.ZIndex = 0
+                    box.Color3 = Color3.new(1, 1, 1)
+                    box.Transparency = 0.75
+                    box.Parent = medal
+                end
+
+                if visible and dot > 0 then
+                    to = Vector2.new(screenPos.X, screenPos.Y)
+                else
+                    local x = math.clamp(screenPos.X, 0, viewport.X)
+                    local y = math.clamp(screenPos.Y, 0, viewport.Y)
+
+                    if dot < 0 then
+                        local center = Vector2.new(viewport.X/2, viewport.Y/2)
+                        local dir = (Vector2.new(screenPos.X, screenPos.Y) - center).Unit
+                        to = center + dir * math.max(viewport.X, viewport.Y)
+                    else
+                        to = Vector2.new(x, y)
+                    end
+                end
+
+                medalTracer.Visible = true
+                medalTracer.From = from
+                medalTracer.To = to
+            else
+                medalTracer.Visible = false
+            end
+        else
+            medalTracer.Visible = false
+        end
+    else
+        medalTracer.Visible = false
+    end
+end)
+
+RunService:BindToRenderStep("Hazard", Enum.RenderPriority.Last.Value + 2, function()
+    if isDead(plr) then return end
+
+    local char = getChar(plr)
+    local root = getRoot(char)
+    if not char or not root then return end
+
+    if pt then
+        for _, trip in getActiveTripmines() do
+            if trip.Transparency ~= 1 then
+                protectTripmine(trip)
+
+                local uuid = trip:GetAttribute("uuid")
+                if uuid then
+                    local p = tripmineprots:FindFirstChild(uuid)
+                    if p then
+                        p.Position = trip.Position
+                    end
+                end
+            end
+        end
+    end
+
+    if pb and root then
+        for _, b in bullets:GetChildren() do
+            if b.Transparency ~= 1 then
+                protectBullet(b)
+
+                local uuid = b:GetAttribute("uuid")
+                if uuid then
+                    local p = bulletprots:FindFirstChild(uuid)
+                    if p then
+                        p.Position = b.Position
+                    end
+                end
+            end
+        end
+
+        for _, p in bulletprots:GetChildren() do
+            if p:IsA("BasePart") then
+                local offset = root.Position - p.Position
+                local dist = offset.Magnitude
+                local radius = p.Size.X / 2
+                local pushDir = offset.Unit
+
+                if dist < radius and isdirectionsafetopushfromguardianbullet(root.Position, pushDir) then
+                    root.CFrame += pushDir * 3
+                elseif dist < radius then --do perpendicular
+                    local altDir = Vector3.new(-pushDir.Z, 0, pushDir.X)
+
+                    if isdirectionsafetopushfromguardianbullet(root.Position, altDir) then
+                        root.CFrame += altDir * 3
+                    else
+                        root.Position = p.Position + Vector3.new(0, 10, 0) --fuck it
+                    end
+                end
+            end
+        end
+    end
+end)
+
+---- destroy
+function destroyGui()
+    if destroying then return end
+
+    destroying = true
+    print("Destroying NULLGUI...")
+
+    if shopAIController and type(shopAIController.Destroy) == "function" then
+        pcall(shopAIController.Destroy, shopAIController)
+        shopAIController = nil
+        print("shop AI cleaned up")
+    end
+
+    if celestialIntegration.Controller then
+        celestialIntegration.Controller:Panic()
+        print("celestial safety cleaned up")
+    end
+
+    if celestialIntegration.AutoFarmController then
+        celestialIntegration.AutoFarmController:Destroy()
+        print("auto-farm cleaned up")
+    end
+
+    if celestialIntegration.UtilityController then
+        celestialIntegration.UtilityController:Destroy()
+        print("utility and visual features cleaned up")
+    end
+
+    if celestialIntegration.UpgradeAutomation then
+        celestialIntegration.UpgradeAutomation:Destroy()
+        print("auto-upgrades cleaned up")
+    end
+
+    runLoop:Disconnect()
+    print("run loop disconnected")
+
+    RunService:UnbindFromRenderStep("DRAWING")
+    print("drawing loop unbinded")
+
+    RunService:UnbindFromRenderStep("Hazard")
+    print("hazards unbinded")
+
+    tripmineprots:Destroy()
+    tpt:Set(false)
+    print("tripmine protection off")
+
+    bulletprots:Destroy()
+    bpt:Set(false)
+    print("bullet protection off")
+
+    local tn = 0
+    closestGiftTracer:Destroy(); tn += 1
+    medalTracer:Destroy(); tn += 1
+    if cgb then cgb:Destroy() end
+    if mb then mb:Destroy() end
+    print("Destroyed", tn, "tracer drawings and/or esp boxes")
+
+    print("disconnecting "..#connections.." connections")
+    for _, c in connections do
+        c:Disconnect()
+    end
+    connections = nil
+
+    print("disconnecting "..#partsConnected.." tile connections")
+    for _, c in pairs(partsConnected) do
+        c:Disconnect()
+    end
+    partsConnected = nil
+
+    print("destroying "..#newInstances.." new instances")
+    for _, i in newInstances do
+        i:Destroy()
+    end
+    newInstances = nil
+
+    vh:Set(false)
+    print("visible hitbox off")
+
+    vv:Set(false)
+    print("visible void off")
+
+    tvelov:Set(false)
+    velocityPart:Destroy()
+    print("velocity visualizer off and destroyed")
+
+    avt:Set(false)
+    print("anti void off")
+
+    er:Set(false)
+    print("reset off")
+
+    ni:Set(false)
+    print("no ice off")
+
+    nf:Set(false)
+    print("no flesh off")
+
+    nsm:Set(false)
+    print("seamines back")
+
+    tweening = false
+    print("stopped tweening")
+    
+    if celestialIntegration.MusicController.CustomPlaying then
+        celestialIntegration.MusicController:StopCurrentMusic()
+        print("stopped custom music")
+    end
+
+    gliderBoost = false
+    print("stopped glider boosting")
+
+    if LV then
+        LV:Destroy()
+        print("fly LV destroyed")
+    end
+
+    local thepartblahblahblah = ReplicatedStorage:FindFirstChild("DESTROYNULLGUI")
+    if thepartblahblahblah ~= nil then
+        thepartblahblahblah:Destroy()
+    end
+
+    magSlider:Set(1)
+    magnet:Fire({Reset = math.huge})
+    print("reset collection range")
+    
+    print("fully destroyed null gui stuff")
+    print("now destroying rayfield...")
+    task.wait(.2)
+    gliderBoost = false --just in case
+    pcall(function()
+        Rayfield:Destroy()
+    end)
+
+    for _, descendant in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+        if descendant:IsA("ScreenGui") and descendant.Name == "Rayfield" then
+            pcall(function()
+                descendant:Destroy()
+            end)
+        end
+    end
+end
+
+refreshGifts(true)
+
+local thepartthatdestroystheguiifthepartisdestroyed = Instance.new("Part")
+thepartthatdestroystheguiifthepartisdestroyed.Name = "DESTROYNULLGUI"
+thepartthatdestroystheguiifthepartisdestroyed.Parent = ReplicatedStorage
+
+thepartthatdestroystheguiifthepartisdestroyed.Destroying:Once(destroyGui);
+
+(function()
+    local configurationInitialized, configurationError = pcall(function()
+        celestialIntegration.ConfigurationManager:Initialize()
+    end)
+
+    if not configurationInitialized then
+        warn("[NULLGUI Configuration] " .. tostring(configurationError))
+    end
+
+    task.delay(0.5, function()
+        if celestialIntegration.UpgradeAutomation
+            and not celestialIntegration.Controller.Destroyed then
+            celestialIntegration.UpgradeAutomation:ApplyAll()
+        end
+    end)
+end)()
+
+if notifOn then
+    notif("Null GUI Executed", "Null GUI")
+end
+end)()
+
