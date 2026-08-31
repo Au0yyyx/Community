@@ -170,7 +170,7 @@ local newInstances = {}
 local cgb
 local mb
 
-(function()
+;(function()
 local environment = getgenv and getgenv() or _G
 local previousCelestialControllers = {}
 local seenCelestialControllers = {}
@@ -321,7 +321,7 @@ task.spawn(function()
     end
 end)
 
-(function()
+;(function()
     local configurationManager = {
         RootFolder = "NullscapeGUI",
         ConfigFolder = "NullscapeGUI/NamedConfigs",
