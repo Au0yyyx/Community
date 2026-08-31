@@ -497,7 +497,7 @@ local function setupRoleAwareStaminaTracker()
                 assert(type(Environment.__ForsakenStaminaTrackerV2) == "table", "tracker did not initialize")
             end)
             if ok then
-                trackerStatus:SetText("Status: Active (state-aware v3)")
+                trackerStatus:SetText("Status: Active (state-aware v4)")
             else
                 trackerStatus:SetText("Status: Failed")
                 warn("[Forsaken Suite] Stamina tracker failed:", loadError)
