@@ -20,7 +20,6 @@ local aliases={
  enemyontop="radarmoduleenemies", radaraltars="radarmodulealtars",
  radartripmines="radarmoduletripmines", highlighttripmines="radarmoduletripmines",
  radarplayer="radarmoduleplayers", radarinstruments="radarmoduleinstruments",
- realwings="drownedægis", theorb="subspacialbarrier",
 }
 local function key(s)return tostring(s):lower():gsub("[^%w\128-\255]","")end
 local byKey={}
@@ -37,14 +36,14 @@ end
 local function difficulty()
  local v=RS:FindFirstChild("Difficulty");v=v and v.Value or 1
  if type(v)=="string"then return v end
- return ({[0]="Casual",[1]="Standard",[2]="Extreme"})[v]or "Standard"
+ -- Live Nullscape values are 1=Casual, 2=Standard, 3=Extreme.
+ return ({[1]="Casual",[2]="Standard",[3]="Extreme"})[v]or "Standard"
 end
 local function party(players)
  if App.PartyOverride then return App.PartyOverride end
- -- Party size and current attendance are separate calculator inputs. A
- -- Party+ lobby can temporarily contain eight or fewer players.
- if Players.MaxPlayers>8 then return "party-plus"end
- return Players.MaxPlayers==1 and "solo"or(Players.MaxPlayers==2 and "duo"or "party")
+ -- MaxPlayers is always large in Nullscape, including reserved solo runs.
+ -- Current attendance is the only replicated party-size signal available.
+ return players==1 and "solo"or(players==2 and "duo"or(players>8 and "party-plus"or "party"))
 end
 local function nothingActive()
  if App.NothingOverride~=nil then return App.NothingOverride end
@@ -75,6 +74,11 @@ local function cost(u,s,owned)
  if s.nothing then p*=.85 end;return math.ceil(p)
 end
 local radarModules={['Radar Module: Altars']=1,['Radar Module: Enemies']=1,['Radar Module: Tripmines']=1,['Radar Module: Players']=1,['Radar Module: Instruments']=1}
+local function enemyActive(name)
+ local f=RS:FindFirstChild("EnemyFolder");f=f and f:FindFirstChild("ActiveEnemies")
+ local v=f and f:FindFirstChild(name)
+ return v~=nil and(not v:IsA("ValueBase")or tonumber(v.Value)==nil or tonumber(v.Value)>0)
+end
 local function eligible(u,s,owned)
  local min=s.difficulty=="Casual"and(u.minLevelCasual or u.minLevel)or u.minLevel
  if s.level<min or owned>=(u.max or 1)then return false end
@@ -83,11 +87,12 @@ local function eligible(u,s,owned)
  if u.name=="Last Robloxian Standing"and s.players<=2 then return false end
  if u.name=="Radar Module: Players"and s.players<=1 then return false end
  if radarModules[u.name]and(s.owned.Radar or 0)<1 then return false end
- if u.name=="Pocket Bell"and(s.owned["Double Jump"]or 0)<1 then return false end
+ if u.name=="Pocket Bell"and((s.owned["Double Jump"]or 0)<1 or not enemyActive("Bell"))then return false end
  if u.name=="Panic Necklace"and(s.owned.Shield or 0)<1 then return false end
  if u.name=="Subspacial Barrier"and s.difficulty~="Casual"and(s.owned["Defuse Kit"]or 0)<3 then return false end
  if u.name=="Shark Tail"and(s.owned["Ninja Belt"]or 0)<1 then return false end
  if u.name=="Drowned Ægis"and(s.owned["More Altars"]or 0)<1 then return false end
+ if u.name=="Radar Module: Instruments"and not enemyActive("Cadence")then return false end
  return true
 end
 local weights={
@@ -130,7 +135,7 @@ local function calculate()
 end
 
 local gui=Instance.new("ScreenGui");gui.Name="NullscapeShopAI";gui.ResetOnSpawn=false;gui.IgnoreGuiInset=true;gui.DisplayOrder=99999;gui.Parent=(gethui and gethui())or CoreGui
-local f=Instance.new("Frame");f.Size=UDim2.fromOffset(390,255);f.Position=UDim2.new(1,-405,.5,-128);f.BackgroundColor3=Color3.fromRGB(10,13,20);f.BackgroundTransparency=.08;f.BorderSizePixel=0;f.Active=true;f.Draggable=true;f.Parent=gui;Instance.new("UICorner",f).CornerRadius=UDim.new(0,10);App.Frame=f;App.Gui=gui
+local f=Instance.new("Frame");f.Size=UDim2.fromOffset(390,255);f.Position=UDim2.new(1,-405,.5,-128);f.BackgroundColor3=Color3.fromRGB(10,13,20);f.BackgroundTransparency=.08;f.BorderSizePixel=0;f.Active=true;f.Draggable=true;f.Visible=Env.__NullscapeShopAIEmbedded~=true;f.Parent=gui;Instance.new("UICorner",f).CornerRadius=UDim.new(0,10);App.Frame=f;App.Gui=gui
 local st=Instance.new("UIStroke",f);st.Color=Color3.fromRGB(94,215,255);st.Thickness=2
 local function text(y,h,size,color,font)local l=Instance.new("TextLabel");l.BackgroundTransparency=1;l.Position=UDim2.fromOffset(14,y);l.Size=UDim2.new(1,-28,0,h);l.Font=font or Enum.Font.Code;l.TextSize=size;l.TextColor3=color;l.TextWrapped=true;l.TextXAlignment=Enum.TextXAlignment.Left;l.TextYAlignment=Enum.TextYAlignment.Top;l.Parent=f;return l end
 local title=text(8,24,15,Color3.fromRGB(110,225,255),Enum.Font.GothamBold);title.Text="NULLSCAPE // SHOP AI"
