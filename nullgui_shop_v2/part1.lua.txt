@@ -269,6 +269,7 @@ local shopAIController
 local shopOverlayEnabled = false
 
 local function loadShopAI()
+    (getgenv and getgenv() or _G).__NullscapeShopAIEmbedded = true
     local previous = (getgenv and getgenv() or _G).__NullscapeShopAI_V1
     if type(previous) == "table" and type(previous.Destroy) == "function" then
         pcall(previous.Destroy, previous)
@@ -1145,118 +1146,5 @@ end)()
     function controller:SuppressScorchedVisual(instance)
         if not self.RemoveScorchedVisuals or not self:IsScorchedVisual(instance) then
             return
-        end
-
-        local state = self.ScorchedStates[instance]
-        if not state then
-            state = {
-                Enabled = instance.Enabled,
-                Connections = {},
-            }
-            self.ScorchedStates[instance] = state
-
-            table.insert(state.Connections, instance:GetPropertyChangedSignal("Enabled"):Connect(function()
-                if self.RemoveScorchedVisuals
-                    and self.ScorchedStates[instance] == state
-                    and instance.Parent
-                    and instance.Enabled then
-                    instance.Enabled = false
-                end
-            end))
-        end
-
-        instance.Enabled = false
-    end
-
-    function controller:RefreshScorchedVisuals()
-        if self.RemoveScorchedVisuals then
-            for _, descendant in ipairs(workspace:GetDescendants()) do
-                self:SuppressScorchedVisual(descendant)
-            end
-            return
-        end
-
-        local visuals = {}
-        for instance in pairs(self.ScorchedStates) do
-            table.insert(visuals, instance)
-        end
-        for _, instance in ipairs(visuals) do
-            self:RestoreScorchedVisual(instance)
-        end
-    end
-
-    function controller:IsLowPolyTarget(instance)
-        return instance:IsA("MeshPart")
-    end
-
-    function controller:ApplyLowPoly(instance)
-        if not self.LowPoly or not self:IsLowPolyTarget(instance) then
-            return
-        end
-
-        if self.LowPolyStates[instance] == nil then
-            self.LowPolyStates[instance] = instance.RenderFidelity
-        end
-
-        pcall(function()
-            instance.RenderFidelity = Enum.RenderFidelity.Performance
-        end)
-    end
-
-    function controller:RestoreLowPoly(instance)
-        local renderFidelity = self.LowPolyStates[instance]
-        if renderFidelity == nil then
-            return
-        end
-
-        self.LowPolyStates[instance] = nil
-        if instance.Parent then
-            pcall(function()
-                instance.RenderFidelity = renderFidelity
-            end)
-        end
-    end
-
-    function controller:RefreshLowPoly()
-        if self.LowPoly then
-            local processed = 0
-            for _, descendant in ipairs(workspace:GetDescendants()) do
-                if not self.LowPoly or self.Destroyed then
-                    return
-                end
-                if self:IsLowPolyTarget(descendant) then
-                    self:ApplyLowPoly(descendant)
-                    processed += 1
-                    if processed % 300 == 0 then
-                        task.wait()
-                    end
-                end
-            end
-            return
-        end
-
-        local instances = {}
-        for instance in pairs(self.LowPolyStates) do
-            table.insert(instances, instance)
-        end
-        for index, instance in ipairs(instances) do
-            self:RestoreLowPoly(instance)
-            if index % 300 == 0 then
-                task.wait()
-            end
-        end
-    end
-
-    function controller:DestroyCadenceVisual(instrument)
-        local visual = self.CadenceVisuals[instrument]
-        if not visual then
-            return
-        end
-
-        if visual.ChamFill then
-            visual.ChamFill:Destroy()
-        end
-        if visual.ChamOutline then
-            visual.ChamOutline:Destroy()
         end
 
