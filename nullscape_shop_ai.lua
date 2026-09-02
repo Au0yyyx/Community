@@ -30,10 +30,8 @@ local function ownedMap()
  if not folder then return out end
  for _,v in ipairs(folder:GetChildren())do if v:IsA("ValueBase")then
   local rawKey=key(v.Name)
-  -- NULLGUI creates/edits these locally; they are not proof of a server purchase.
-  if Env.__NullShopIgnoreClientUpgrades~=false and nullguiClientOnly[rawKey] then continue end
   local k=aliases[rawKey]or rawKey;local u=byKey[k]
-  if u then local n=tonumber(v.Value)or 0;if u.name=="Gift Magnet"and n>u.max then n=math.ceil(n/20)end
+  if u then local originals=Env.__NULLGUIUpgradeOriginals;local original=originals and originals[v.Name];local n=original~=nil and tonumber(original)or tonumber(v.Value)or 0;if u.name=="Gift Magnet"and n>u.max then n=math.ceil(n/20)end
    out[u.name]=math.max(out[u.name]or 0,math.clamp(n,0,u.max or 1))end
  end end;return out
 end
@@ -170,7 +168,7 @@ local function clear(g)for _,x in ipairs(g:GetChildren())do if not x:IsA("UIList
 local function card(g,name,cost,img,state,click)local b=Instance.new("TextButton");b.Name="Card";b.Size=UDim2.fromOffset(96,124);b.BackgroundColor3=state=="selected"and Color3.fromRGB(29,78,216)or(state=="blocked"and Color3.fromRGB(75,28,35)or Color3.fromRGB(8,8,8));b.BorderSizePixel=0;b.Text="";b.AutoButtonColor=click~=nil;b.Parent=g;Instance.new("UICorner",b).CornerRadius=UDim.new(0,8);local st=Instance.new("UIStroke",b);st.Color=state=="selected"and Color3.fromRGB(147,197,253)or Color3.fromRGB(168,85,247);local im=Instance.new("ImageLabel");im.BackgroundTransparency=1;im.Position=UDim2.fromOffset(13,4);im.Size=UDim2.fromOffset(70,70);im.Image=img or"";im.ScaleType=Enum.ScaleType.Fit;im.Parent=b;local c=label(b,cost and(cost.." GG")or"OWNED",UDim2.fromOffset(5,73),UDim2.new(1,-10,0,18),Enum.Font.GothamBold,10,Color3.new(1,1,1),Enum.TextXAlignment.Center);c.BackgroundColor3=Color3.new(0,0,0);c.BackgroundTransparency=.25;label(b,name,UDim2.fromOffset(4,94),UDim2.new(1,-8,0,26),Enum.Font.GothamBold,9,Color3.fromRGB(245,233,255),Enum.TextXAlignment.Center);if click then b.MouseButton1Click:Connect(click)end end
 local last="";task.spawn(function()while not App.Destroyed do local s,choices,basket,spent=calculate();lv.Text=tostring(s.level);pc.Text=tostring(s.players);pt.Text=s.party:upper();df.Text=s.difficulty:upper()..(s.nothing and" / NOTHING?"or"")
  clear(ownedG);clear(shopG);clear(nextG);clear(altarG);clear(purifyG);local selectedTotal=0
- for _,u in ipairs(Upgrades)do local n=s.owned[u.name]or 0;if n>0 then card(ownedG,u.name,nil,icon(u),n>0 and"selected"or nil)end end
+ for _,u in ipairs(Upgrades)do local n=s.owned[u.name]or 0;if n>0 then local max=u.max or 1;card(ownedG,u.name.."  "..n.."/"..max,nil,icon(u),"selected")end end
  for _,it in ipairs(choices)do if selectedShop[it.u.name]then selectedTotal+=it.cost end end
  for _,it in ipairs(choices)do local sel=selectedShop[it.u.name];local blocked=not sel and selectedTotal+it.cost>s.money;card(shopG,it.u.name,it.cost,icon(it.u),sel and"selected"or(blocked and"blocked"or nil),function()selectedShop[it.u.name]=not selectedShop[it.u.name]or nil end)end
  local ns=table.clone(s);ns.level=s.level+1;local nextChoices={};for _,u in ipairs(Upgrades)do local own=ns.owned[u.name]or 0;if eligible(u,ns,own)then local n=own+1;local c=cost(u,ns,own);nextChoices[#nextChoices+1]={u=u,stack=n,cost=c,score=utility(u,ns,n)}end end;table.sort(nextChoices,function(a,b)return a.score>b.score end);for _,it in ipairs(nextChoices)do card(nextG,it.u.name,it.cost,icon(it.u),it.cost>s.money and"blocked"or nil)end
