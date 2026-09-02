@@ -140,6 +140,7 @@ local f=Instance.new("Frame");f.Name="CompactWebsiteShop";f.Size=UDim2.fromOffse
 local stroke=Instance.new("UIStroke",f);stroke.Color=Color3.fromRGB(168,85,247);stroke.Thickness=2
 local grad=Instance.new("UIGradient",f);grad.Rotation=90;grad.Color=ColorSequence.new(Color3.fromRGB(38,17,58),Color3.fromRGB(0,0,0))
 local function label(parent,t,pos,size,font,ts,color,xa)local l=Instance.new("TextLabel");l.BackgroundTransparency=1;l.Text=t;l.Position=pos;l.Size=size;l.Font=font or Enum.Font.Gotham;l.TextSize=ts or 12;l.TextColor3=color or Color3.new(1,1,1);l.TextXAlignment=xa or Enum.TextXAlignment.Left;l.TextYAlignment=Enum.TextYAlignment.Center;l.TextTruncate=Enum.TextTruncate.AtEnd;l.Parent=parent;return l end
+local function con(c)App.Connections[#App.Connections+1]=c;return c end
 label(f,"NULLSCAPE SHOP CALCULATOR",UDim2.fromOffset(14,7),UDim2.new(1,-174,0,27),Enum.Font.GothamBold,16,Color3.fromRGB(245,233,255))
 local moving,resizing=false,false
 local function toggle(text,x,fn)local b=Instance.new("TextButton");b.Position=UDim2.new(1,x,0,8);b.Size=UDim2.fromOffset(66,23);b.BackgroundColor3=Color3.fromRGB(17,17,17);b.BorderSizePixel=0;b.Text=text..": OFF";b.TextColor3=Color3.fromRGB(216,180,254);b.Font=Enum.Font.GothamBold;b.TextSize=9;b.Parent=f;Instance.new("UICorner",b).CornerRadius=UDim.new(0,7);local s=Instance.new("UIStroke",b);s.Color=Color3.fromRGB(126,34,206);b.MouseButton1Click:Connect(function()local on=fn();b.Text=text..(on and ": ON"or": OFF");b.BackgroundColor3=on and Color3.fromRGB(72,28,105)or Color3.fromRGB(17,17,17)end)end
