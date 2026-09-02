@@ -1,3 +1,646 @@
+                while sendingEvent do
+                    if not sendingEvent then break end
+                    Camera.CFrame = cf
+                    task.wait()
+                end
+            end)
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(0.01)
+            sendingEvent = false
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            
+            task.delay(0.05, function()
+                canPress = true
+            end)
+        end
+    end
+})
+keyTab:CreateKeybind({
+    Name = "Fly / Glider Boost (HOLD)",
+    CurrentKeybind = "Q",
+    HoldToInteract = true,
+    Callback = function(holding)
+        if not holding then
+            gliderBoost = false
+            return
+        end
+
+        if not canGliderBoost then return end
+
+        gliderBoost = holding
+    end
+})
+keyTab:CreateKeybind({
+    Name = "Teleport to Spawn",
+    CurrentKeybind = "Home",
+    HoldToInteract = false,
+    Callback = function()
+        if not canGoHome then return end
+        local root, hitbox = getRoot(getChar(plr))
+        local pos = spawnPart.Position + Vector3.new(0,4,0)
+        root.Position = pos
+        hitbox.Position = pos
+    end
+})
+keyTab:CreateKeybind({
+    Name = "Teleport to Beacon",
+    CurrentKeybind = "Insert",
+    HoldToInteract = false,
+    Callback = function()
+        if not canGoBeacon then return end
+        local root, hitbox = getRoot(getChar(plr))
+        local pos = workspace.Beacon.Position + Vector3.new(0,4,0)
+        root.Position = pos
+        hitbox.Position = pos
+    end
+})
+keyTab:CreateKeybind({
+    Name = "Cancel Collecting",
+    CurrentKeybind = "End",
+    HoldToInteract = false,
+    Callback = function()
+        if not canCancelTween or not tweening then return end
+        
+        tweening = false
+    end
+})
+-- keyTab:CreateKeybind({
+--     Name = "Toggle Collect Aura",
+--     CurrentKeybind = "Insert",
+--     HoldToInteract = false,
+--     Callback = function()
+--         if not canToggleAura then return end
+--         if aura then
+--             ga:Set(false)  
+--             notif("Collect Aura Off.")
+--         else
+--             ga:Set(true)
+--             notif("Collect Aura On.")
+--         end
+--     end
+-- })
+
+keyTab:CreateSection("Celestial")
+
+keyTab:CreateKeybind({
+    Name = "Toggle Celestial Safety",
+    CurrentKeybind = "Z",
+    HoldToInteract = false,
+    Flag = "NULLGUICelestialSafetyKeybind",
+    Callback = function()
+        celestialIntegration.SafetyToggle:Set(not celestialIntegration.SafetyToggle.CurrentValue)
+    end
+})
+
+keyTab:CreateKeybind({
+    Name = "Toggle Celestial Shield Trigger",
+    CurrentKeybind = "X",
+    HoldToInteract = false,
+    Flag = "NULLGUICelestialShieldKeybind",
+    Callback = function()
+        celestialIntegration.ShieldTriggerToggle:Set(not celestialIntegration.ShieldTriggerToggle.CurrentValue)
+    end
+})
+
+keyTab:CreateSection("Server Enemy Auto Disable")
+
+local serverDisablerKeybindsEnabled = false
+keyTab:CreateToggle({
+    Name = "Enable Server Enemy Auto Disable Keybinds",
+    CurrentValue = serverDisablerKeybindsEnabled,
+    Flag = "NULLGUIEnableServerAutoDisableKeybinds",
+    Callback = function(value)
+        serverDisablerKeybindsEnabled = value == true
+    end
+})
+
+local serverDisablerKeybinds = {
+    {Enemy = "Bell", Label = "Bell"},
+    {Enemy = "Mart", Label = "Mart"},
+    {Enemy = "Springer", Label = "Springer"},
+    {Enemy = "Baby", Label = "Baby"},
+    {Enemy = "Flesh", Label = "Flesh"},
+    {Enemy = "Guardian", Label = "Default Guardian"},
+    {Enemy = "ShadowGuardian", Label = "Voidbound Guardian"},
+    {Enemy = "Telefragger", Label = "Telefragger"},
+    {Enemy = "Cadence", Label = "Cadence"},
+    {Enemy = "ShadowBaby", Label = "Voidbound Baby"},
+    {Enemy = "RealityBreak", Label = "Reality Break"},
+}
+
+local function createServerDisablerKeybind(keybindInfo)
+    local keybindControl
+    keybindControl = keyTab:CreateKeybind({
+        Name = "Toggle "..keybindInfo.Label.." Auto Disable",
+        CurrentKeybind = "Unknown",
+        HoldToInteract = false,
+        Flag = "NULLGUI"..keybindInfo.Enemy.."AutoDisableKeybind",
+        Callback = function()
+            if not serverDisablerKeybindsEnabled then
+                return
+            end
+
+            local currentKeybind = keybindControl and keybindControl.CurrentKeybind
+            if not currentKeybind or currentKeybind == "Unknown" then
+                return
+            end
+
+            local toggle = serverDisablerToggles[keybindInfo.Enemy]
+            if not toggle or type(toggle.Set) ~= "function" then
+                return
+            end
+
+            local enabled = auto_disable[keybindInfo.Enemy] ~= true
+            toggle:Set(enabled)
+
+            if notifOn then
+                notif(
+                    keybindInfo.Label.." auto disable "..(enabled and "enabled." or "disabled."),
+                    "Enemy Keybind"
+                )
+            end
+        end
+    })
+end
+
+for _, keybindInfo in ipairs(serverDisablerKeybinds) do
+    createServerDisablerKeybind(keybindInfo)
+end
+
+keyTab:CreateKeybind({
+    Name = "Toggle All Notifications",
+    CurrentKeybind = "V",
+    HoldToInteract = false,
+    Flag = "NULLGUINotificationsKeybind",
+    Callback = function()
+        if celestialIntegration.NotificationToggle then
+            celestialIntegration.NotificationToggle:Set(not notifOn)
+        else
+            notifOn = not notifOn
+        end
+    end
+})
+
+keyTab:CreateKeybind({
+    Name = "Destroy NULLGUI / Panic",
+    CurrentKeybind = "P",
+    HoldToInteract = false,
+    Flag = "NULLGUIPanicKeybind",
+    Callback = function()
+        destroyGui()
+    end
+})
+
+keyTab:CreateSection("Enable Keybinds")
+keyTab:CreateToggle({
+    Name = "Collect Normal Gifts Keybind",
+    CurrentValue = canEzCollectNormal,
+    Callback = function(Value)
+        canEzCollectNormal = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Collect Golden Gifts Keybind",
+    CurrentValue = canEzCollectGolden,
+    Callback = function(Value)
+        canEzCollectGolden = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Get Medal Keybind",
+    CurrentValue = canEzCollectMedal,
+    Callback = function(Value)
+        canEzCollectMedal = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Disable All Enemies Keybind",
+    CurrentValue = canEzDisableAll,
+    Callback = function(Value)
+        canEzDisableAll = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Disable All Client-sided Enemies Only Keybind",
+    CurrentValue = canEzDisableAllC,
+    Callback = function(Value)
+        canEzDisableAllC = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Reset Double Jumps/Ability Keybind",
+    CurrentValue = canFullReset,
+    Callback = function(Value)
+        canFullReset = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Bring Jump Pad Keybind",
+    CurrentValue = canBringPad,
+    Callback = function(Value)
+        canBringPad = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Bring Tria Orb Keybind",
+    CurrentValue = canBringTria,
+    Callback = function(Value)
+        canBringTria = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Instant Grapple Keybind",
+    CurrentValue = canInstaGrapple,
+    Callback = function(Value)
+        canInstaGrapple = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Fly / Glider Boost Keybind",
+    CurrentValue = canGliderBoost,
+    Callback = function(Value)
+        canGliderBoost = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Teleport to Spawn Keybind",
+    CurrentValue = canGoHome,
+    Callback = function(Value)
+        canGoHome = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Teleport to Beacon Keybind",
+    CurrentValue = canGoBeacon,
+    Callback = function(Value)
+        canGoBeacon = Value
+    end
+})
+keyTab:CreateToggle({
+    Name = "Cancel Collecting Keybind",
+    CurrentValue = canCancelTween,
+    Callback = function(Value)
+        canCancelTween = Value
+    end
+})
+-- keyTab:CreateToggle({
+--     Name = "Toggle Collect Aura Keybind",
+--     CurrentValue = canToggleAura,
+--     Callback = function(Value)
+--         canToggleAura = Value
+--     end
+-- })
+
+--==--==--==--==--==--==--==--==--== MUSIC~~~
+celestialIntegration.MusicController = celestialIntegration.MusicController or {}
+;(function()
+    local musicController = celestialIntegration.MusicController
+    local musicFolder = game:GetService("SoundService").MusicFolder
+
+    function musicController:StopCurrentMusic()
+        for _, sound in musicFolder:GetDescendants() do
+            if sound:IsA("Sound") and sound.Playing then
+                sound:Stop()
+            end
+        end
+
+        local currentMusic = music.Value
+        if currentMusic then
+            currentMusic:Stop()
+        end
+
+        music.Value = nil
+        self.CurrentCustom = nil
+        self.CustomPlaying = false
+    end
+
+    function musicController:PlayMusic(sound)
+        self:StopCurrentMusic()
+        self.CustomPlaying = true
+        sound:Play()
+        music.Value = sound
+        self.CurrentCustom = sound
+    end
+
+    musicTab:CreateButton({
+        Name = "Stop Current Music",
+        Callback = function()
+            musicController:StopCurrentMusic()
+        end
+    })
+    musicTab:CreateDivider()
+
+    for _, soundOrFolder in musicFolder:GetChildren() do
+        if soundOrFolder:IsA("Sound") then
+            musicTab:CreateButton({
+                Name = "Play "..soundOrFolder.Name,
+                Callback = function()
+                    musicController:PlayMusic(soundOrFolder)
+                end
+            })
+        elseif soundOrFolder:IsA("Folder") and soundOrFolder.Name ~= "Intermission" then
+            local displayName = soundOrFolder:FindFirstChild("Name")
+            local normalSong = soundOrFolder.MainSong
+            local collapseSong = soundOrFolder.EscapeSong
+
+            musicTab:CreateSection(displayName.Value)
+            musicTab:CreateButton({
+                Name = "Play Normal",
+                Callback = function()
+                    musicController:PlayMusic(normalSong)
+                end
+            })
+            musicTab:CreateButton({
+                Name = "Play Collapse",
+                Callback = function()
+                    musicController:PlayMusic(collapseSong)
+                end
+            })
+        end
+    end
+end)()
+
+--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-- configuration
+celestialIntegration.ConfigurationTab:CreateSection("Saved Settings")
+celestialIntegration.ConfigurationManager.NameInput = celestialIntegration.ConfigurationTab:CreateInput({
+    Name = "Config Name",
+    CurrentValue = "",
+    PlaceholderText = "Enter a config name",
+    RemoveTextAfterFocusLost = false,
+    NULLGUIExcludeFromConfig = true,
+    Callback = function(configName)
+        celestialIntegration.ConfigurationManager.PendingName = configName
+    end
+})
+celestialIntegration.ConfigurationManager.ConfigDropdown = celestialIntegration.ConfigurationTab:CreateDropdown({
+    Name = "Saved Configs",
+    Options = {celestialIntegration.ConfigurationManager.EmptyOption},
+    CurrentOption = {celestialIntegration.ConfigurationManager.EmptyOption},
+    MultipleOptions = false,
+    NULLGUIExcludeFromConfig = true,
+    Callback = function(selectedOptions)
+        local selectedName = selectedOptions[1]
+        if selectedName == celestialIntegration.ConfigurationManager.EmptyOption then
+            selectedName = nil
+        end
+
+        celestialIntegration.ConfigurationManager.SelectedName = selectedName
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Save New Config",
+    Callback = function()
+        local configSaved, resultMessage = celestialIntegration.ConfigurationManager:SaveConfig(
+            celestialIntegration.ConfigurationManager.PendingName,
+            false
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(configSaved, resultMessage)
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Overwrite Selected Config",
+    Callback = function()
+        local configSaved, resultMessage = celestialIntegration.ConfigurationManager:SaveConfig(
+            celestialIntegration.ConfigurationManager.SelectedName,
+            true
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(configSaved, resultMessage)
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Load Selected Config",
+    Callback = function()
+        local configLoaded, resultMessage = celestialIntegration.ConfigurationManager:LoadConfig(
+            celestialIntegration.ConfigurationManager.SelectedName,
+            false
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(configLoaded, resultMessage)
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Delete Selected Config",
+    Callback = function()
+        local configDeleted, resultMessage = celestialIntegration.ConfigurationManager:DeleteConfig(
+            celestialIntegration.ConfigurationManager.SelectedName
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(configDeleted, resultMessage)
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Refresh Config List",
+    Callback = function()
+        local listRefreshed, resultMessage = celestialIntegration.ConfigurationManager:RefreshList(
+            celestialIntegration.ConfigurationManager.SelectedName
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(listRefreshed, resultMessage)
+    end
+})
+
+celestialIntegration.ConfigurationTab:CreateSection("Autoload")
+celestialIntegration.ConfigurationManager.AutoloadLabel = celestialIntegration.ConfigurationTab:CreateLabel("Autoload: None")
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Set Selected as Autoload",
+    Callback = function()
+        local autoloadSaved, resultMessage = celestialIntegration.ConfigurationManager:SetAutoload(
+            celestialIntegration.ConfigurationManager.SelectedName
+        )
+        celestialIntegration.ConfigurationManager:NotifyResult(autoloadSaved, resultMessage)
+    end
+})
+celestialIntegration.ConfigurationTab:CreateButton({
+    Name = "Clear Autoload",
+    Callback = function()
+        local autoloadCleared, resultMessage = celestialIntegration.ConfigurationManager:ClearAutoload()
+        celestialIntegration.ConfigurationManager:NotifyResult(autoloadCleared, resultMessage)
+    end
+})
+
+--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-- debug
+debugTab:CreateSection("Enemy Automation Status")
+;(function()
+    local enemyDetectionLabel = debugTab:CreateLabel("VBO: 0 | Kolona: 0 | Tick watchers: 0")
+    local abilityCallLabel = debugTab:CreateLabel("Ability calls: 0 native | 0 fallback")
+
+    task.spawn(function()
+        while not celestialIntegration.Controller.Destroyed do
+            local safety = celestialIntegration.Controller.EnemySafety
+            enemyDetectionLabel:Set(string.format(
+                "VBO: %d | Kolona: %d | Tick watchers: %d",
+                safety.MalfunctionDetections,
+                safety.KolonaDetections,
+                safety.KolonaTickWatchers
+            ))
+            abilityCallLabel:Set(string.format(
+                "Ability calls: %d native | %d fallback",
+                safety.NativeAbilityCalls,
+                safety.FallbackAbilityCalls
+            ))
+            task.wait(0.25)
+        end
+    end)
+end)()
+
+debugTab:CreateButton({
+    Name = "Copy Lobby Code",
+    Callback = function()
+        if code.Value == nil or code.Value == " " or code.Value == "" then
+            if notifOn then
+                notif("You are in solo or code not found.", "Code")
+            end
+            return
+        end
+        toClipboard(code.Value)
+    end
+})
+local er = debugTab:CreateToggle({
+    Name = "Enable Reset",
+    CurrentValue = true,
+    Callback = function(Value)
+        StarterGui:SetCore("ResetButtonCallback", Value)
+    end
+})
+debugTab:CreateButton({
+    Name = "Kill Character (Respawns in Intermission)",
+    Callback = function()
+        events.Died:FireServer("Void", shared.LeftGroundWithinBellMethod, game.ReplicatedStorage.Level.Value)
+    end
+})
+celestialIntegration.NotificationToggle = debugTab:CreateToggle({
+    Name = "Enable All Notifications",
+    CurrentValue = notifOn,
+    Callback = function(Value)
+        notifOn = Value
+    end
+})
+StarterGui:SetCore("ResetButtonCallback", true)
+debugTab:CreateButton({
+    Name = "Rejoin (might not work)",
+    Callback = function()
+	    if #Players:GetPlayers() <= 1 then
+	    	Players.LocalPlayer:Kick("\nRejoining...")
+	    	wait()
+	    	TeleportService:Teleport(PlaceId, plr)
+	    else
+	    	TeleportService:TeleportToPlaceInstance(PlaceId, JobId, plr)
+	    end
+    end
+})
+debugTab:CreateButton({
+    Name = "Destroy GUI/Panic",
+    Callback = function()
+        destroyGui()
+    end
+})
+
+---------connections!
+
+for _, enemy in ipairs(enemies:GetChildren()) do
+    if enemy.Name == "RealityBreak2" then
+        enemy.Name = "RealityBreak"
+    end
+    task.spawn(handleEnemy, enemy, 5)
+end
+table.insert(connections, workspace.Skinwalkers.ChildAdded:Connect(function(enemy)
+    enemy.Name = "Skinwalker"
+    handleEnemy(enemy)
+end))
+table.insert(connections, enemies.ChildAdded:Connect(function(enemy)
+    if enemy.Name == "Oblivion" and dso then
+        enemy:Destroy()
+    end
+    if enemy.Name == "RealityBreak2" then
+        enemy.Name = "RealityBreak"
+    end
+
+    task.spawn(function()
+        handleEnemy(enemy)
+    end)
+end))
+table.insert(connections, pads.ChildAdded:Connect(function(child)
+    if dsm then
+        if child.Name == "Seamine" then
+            task.wait(3)
+            local ti = child:FindFirstChild("TouchInterest")
+            local ls = child:FindFirstChild("ClientMine")
+
+            if ti then
+                ti:Destroy()
+                n += 1
+            end
+            if ls then
+                ls.Enabled = false
+            end
+        end
+    end
+end))
+table.insert(connections, music.Changed:Connect(function()
+    local musicController = celestialIntegration.MusicController
+    if musicController.CustomPlaying
+        and musicController.CurrentCustom
+        and music.Value ~= musicController.CurrentCustom then
+        music.Value:Stop()
+        music.Value = musicController.CurrentCustom
+    end
+end))
+
+----loops!
+--local loopClosest
+--local giftSelection = {}
+
+--local lastAura = 0
+--local auraRATE = 1/45
+
+local runLoop = RunService.Heartbeat:Connect(function()
+    if (aura or tweening or cesp) and not isDead(plr) then
+        refreshGifts()
+    end
+
+    local plrdead = isDead(plr)
+    if plrdead then return end
+    
+    local char = getChar(plr)
+    local root, hitbox = getRoot(char)
+    local h = getHuman(char)
+    Camera = Camera or workspace.CurrentCamera
+
+--[[local auranow = tick()
+    if aura and auranow - lastAura > auraRATE then
+        lastAura = auranow
+
+        if #availableNormalGifts == 0 then
+            giftSelection = availableGoldenGifts
+        elseif #availableGoldenGifts == 0 then
+            giftSelection = availableNormalGifts
+        end
+
+        local newClose = getClosestGift(giftSelection)
+
+        if newClose then
+            local dist = (root.Position - newClose.Position).Magnitude
+
+            if dist <= 7.5 then
+                loopClosest = newClose
+                collectGift:FireServer(loopClosest)
+            end
+        end
+     end]]
+
+    if visibleHitbox then
+        if root and hitbox then
+            hitbox.Transparency = 0
+        end
+    end
+
+    if av then
+        local pos = spawnPart.Position + Vector3.new(0,4,0)
+
+        if root and root.Position.Y <= workspace.KillVoid.Position.Y + 75 then
+            if antiVoidSelection == 1 then
+                root.Position = pos
+            elseif antiVoidSelection == 2 then
+                local alv = root.AssemblyLinearVelocity
+                root.AssemblyLinearVelocity = Vector3.new(alv.X,lp,alv.Z)
+            elseif antiVoidSelection == 3 then
                 local availableGifts = availableNormalGifts
                 if #availableGifts == 0 then availableGifts = availableGoldenGifts end
                 local gift = getClosestGift(availableGifts)
