@@ -1,3 +1,234 @@
+            end
+        end)
+
+        return true
+    end
+
+    function controller:StopAll(updateToggles)
+        self.AutoNormal = false
+        self.AutoGolden = false
+        self.AutoBeacon = false
+        self.AutoLobby = false
+        self.ActiveCollection = nil
+        self.CollectionTaskActive = false
+        self.SawGoldenGift = false
+        self.BeaconedForCurrentBatch = false
+        tweening = false
+        self:ResetCandidates()
+
+        if updateToggles then
+            for _, toggle in ipairs({self.NormalToggle, self.GoldenToggle, self.BeaconToggle, self.LobbyToggle}) do
+                if toggle and type(toggle.Set) == "function" then
+                    toggle:Set(false)
+                end
+            end
+        end
+    end
+
+    function controller:Destroy()
+        if self.Destroyed then
+            return
+        end
+
+        self.Destroyed = true
+        self:StopAll(false)
+    end
+
+    celestialIntegration.AutoFarmTab:CreateSection("Gift Collection")
+    controller.NormalToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Collect Normal Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoNormal = value
+
+            if not value and controller.ActiveCollection == "normal" then
+                tweening = false
+            end
+        end
+    })
+    controller.GoldenToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Collect Golden Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoGolden = value
+
+            if not value and controller.ActiveCollection == "golden" then
+                tweening = false
+            end
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Beacon")
+    controller.BeaconToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Auto-Beacon after Golden Gifts",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoBeacon = value
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateButton({
+        Name = "Teleport to Beacon Now",
+        Callback = function()
+            controller:TeleportToBeacon()
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Lobby")
+    controller.LobbyToggle = celestialIntegration.AutoFarmTab:CreateToggle({
+        Name = "Auto-Select Lobby Choice",
+        CurrentValue = false,
+        Callback = function(value)
+            controller.AutoLobby = value
+        end
+    })
+    celestialIntegration.AutoFarmTab:CreateSection("Misc")
+    celestialIntegration.AutoFarmTab:CreateButton({
+        Name = "Cancel All",
+        Callback = function()
+            controller:StopAll(true)
+
+            if notifOn then
+                notif("All auto-farm routines stopped.", "Auto-Farm")
+            end
+        end
+    })
+
+    task.spawn(function()
+        while not controller.Destroyed do
+            task.wait(0.5)
+
+            if controller.Destroyed then
+                break
+            end
+
+            local inRound = ReplicatedStorage:FindFirstChild("InRound")
+            if not inRound or not inRound.Value then
+                if controller.ActiveCollection then
+                    tweening = false
+                end
+
+                controller:ResetCandidates()
+                controller.SawGoldenGift = false
+                controller.BeaconedForCurrentBatch = false
+
+                if controller.AutoLobby
+                    and not controller.LobbyBusy
+                    and tick() - controller.LastLobbyAttempt >= 2.5
+                then
+                    task.spawn(function()
+                        controller:RunLobbySelection()
+                    end)
+                end
+
+                continue
+            end
+
+            controller:CompactCandidates(availableNormalGifts)
+            controller:CompactCandidates(availableGoldenGifts)
+
+            if controller.AutoGolden and not controller.CollectionTaskActive and not tweening then
+                refreshGifts(true, true)
+                controller:CompactCandidates(availableGoldenGifts)
+                local goldenGift = getClosestGift(availableGoldenGifts)
+
+                if goldenGift then
+                    controller.SawGoldenGift = true
+                    controller.BeaconedForCurrentBatch = false
+                    controller:StartCollection("golden")
+                    continue
+                end
+
+                if controller.AutoBeacon
+                    and controller.SawGoldenGift
+                    and not controller.BeaconedForCurrentBatch
+                then
+                    controller.BeaconedForCurrentBatch = controller:TeleportToBeacon()
+                end
+            end
+
+            if controller.AutoNormal and not controller.CollectionTaskActive and not tweening then
+                refreshGifts(true, false)
+                controller:CompactCandidates(availableNormalGifts)
+
+                if getClosestGift(availableNormalGifts) then
+                    controller:StartCollection("normal")
+                end
+            end
+        end
+    end)
+end)()
+
+---------button
+mainTab:CreateSection("Gifts")
+mainTab:CreateParagraph({
+    Title = "NOTE",
+    Content = "Currently, finding gifts are slow. Spam the Collect Normal and Golden Gifts button to start collecting."
+})
+mainTab:CreateButton({
+    Name = "Collect Normal Gifts",
+    Callback = function()
+        collect("normal")
+    end
+})
+mainTab:CreateButton({
+    Name = "Collect Golden Gifts",
+    Callback = function()
+        collect("golden")
+    end
+})
+mainTab:CreateButton({
+    Name = "Cancel Collecting",
+    Callback = function()
+        if tweening then
+            tweening = false
+        end
+    end
+})
+
+mainTab:CreateDivider()
+magSlider = mainTab:CreateSlider({
+    Name = "Gift Collection Range",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(v)
+        magnet:Fire({Add = v})
+    end
+})
+mainTab:CreateButton({
+    Name = "Reset Range",
+    Callback = function()
+        magSlider:Set(1)
+        magnet:Fire({Reset = 1})
+    end
+})
+
+-- local ga = mainTab:CreateToggle({
+--     Name = "Collect Aura (LAGGY ON HIGHER LEVELS)",
+--     CurrentValue = aura,
+--     Callback = function(Value)
+--         aura = Value
+--     end
+-- })
+
+mainTab:CreateDivider()
+;(function()
+celestialIntegration.GiftCounterToggle = mainTab:CreateToggle({
+    Name = "Show Gift Counter Under HUD",
+    CurrentValue = celestialIntegration.Controller.GiftCounterEnabled,
+    Flag = "NULLGUICelestialGiftCounter",
+    Callback = function(value)
+        celestialIntegration.Controller:SetGiftCounterEnabled(value)
+    end
+})
+
+---------------------------------------------------------------------------------------------------------------------------------
+
+if fSignal then
+    upgradeTab:CreateLabel("Your exploit can add upgrades.")
+else
+    upgradeTab:CreateLabel("Your exploit currently doesn't support adding upgrades.")
+end
+upgradeTab:CreateParagraph({
+    Title = "NOTE",
     Content = "Upgrades added are temporary, but might permanently show on the menu\nYou can also remove upgrades bought\nSome upgrades don't have an effect past their limit\n'Why isn't this upgrade here?' That upgrade cannot be added."
 })
 upgradeTab:CreateDivider()
@@ -25,7 +256,17 @@ local clientUpgrades = {
     "RadarAltars"
 }
 
+local upgradeOriginals = (getgenv and getgenv() or _G).__NULLGUIUpgradeOriginals or {}
+(getgenv and getgenv() or _G).__NULLGUIUpgradeOriginals = upgradeOriginals
+local function rememberUpgradeOriginal(name)
+    if upgradeOriginals[name] == nil then
+        local value = upgrades:FindFirstChild(name)
+        upgradeOriginals[name] = value and tonumber(value.Value) or 0
+    end
+end
+
 local function addUpgrade(name)
+    rememberUpgradeOriginal(name)
     local intv:IntValue = upgrades:FindFirstChild(name)
     if intv then
         print("intv found")
@@ -52,6 +293,7 @@ local function addUpgrade(name)
 
 end
 local function subUpgrade(name)
+    rememberUpgradeOriginal(name)
     local intv:IntValue = upgrades:FindFirstChild(name)
     if intv and intv.Value > 1 then
         print("intv found, more than 1")
@@ -95,6 +337,7 @@ end
     end
 
     function controller:SetUpgradeQuantity(upgradeName, quantity)
+        rememberUpgradeOriginal(upgradeName)
         local normalizedQuantity = self:NormalizeQuantity(quantity)
         if normalizedQuantity <= 0 or self.Destroyed then
             return false
@@ -904,399 +1147,4 @@ serverDisablerToggles.Guardian = enemyTab:CreateToggle({
         if guardian then
             handleEnemy(guardian)
         end
-    end
-})
-serverDisablerToggles.ShadowGuardian = enemyTab:CreateToggle({
-    Name = "Auto Disable Voidbound Guardian",
-    CurrentValue = auto_disable.ShadowGuardian,
-    Flag = "NULLGUIShadowGuardianAutoDisable",
-    Callback = function(value)
-        auto_disable.ShadowGuardian = value
-        celestialIntegration.Controller.EnemySafety.Friendly.shadowguardian = value
-        celestialIntegration.Controller:RefreshSafetyFilter()
-
-        local shadowGuardian = enemies:FindFirstChild("ShadowGuardian")
-        if shadowGuardian then
-            handleEnemy(shadowGuardian)
-        end
-    end
-})
-
-enemyTab:CreateSection("Operator")
-enemyTab:CreateToggle({
-    Name = "Auto Stop for Operator",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.AutoStopOperator,
-    Flag = "NULLGUIOperatorAutoStop",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.AutoStopOperator = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Cancel Ability with SharkTail",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorCancelWithSharkTail,
-    Flag = "NULLGUIOperatorSharkTailCancel",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorCancelWithSharkTail = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Additional SharkTail Cancel Delay",
-    Range = {0, 3},
-    Increment = 0.05,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorSharkTailCancelDelay,
-    Flag = "NULLGUIOperatorSharkTailCancelDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorSharkTailCancelDelay = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Cancel Ability with Jump",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorCancelWithJump,
-    Flag = "NULLGUIOperatorJumpCancel",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorCancelWithJump = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Delay When Ability Is Idle (3s Window)",
-    Range = {0, 3},
-    Increment = 0.05,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorIdleDelay,
-    Flag = "NULLGUIOperatorIdleDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorIdleDelay = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Delay When Ability Is Active (3s Window)",
-    Range = {0, 3},
-    Increment = 0.05,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorAbilityDelay,
-    Flag = "NULLGUIOperatorAbilityDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorAbilityDelay = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Input Release Duration",
-    Range = {0.05, 1},
-    Increment = 0.05,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.OperatorStopDuration,
-    Flag = "NULLGUIOperatorStopDuration",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.OperatorStopDuration = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Friendly / Harmless",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.Friendly.operator,
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.Friendly.operator = value
-        celestialIntegration.Controller:RefreshSafetyFilter()
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.Operator,
-    Callback = function(v)
-        auto_destroy.Operator = v
-        local Operator = enemies:FindFirstChild("Operator") 
-        if Operator then
-            handleEnemy(Operator)
-        end
-    end
-})
-
-enemyTab:CreateSection("Malfunction")
-enemyTab:CreateToggle({
-    Name = "Auto Stop for Voidbound Operator",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.AutoStopMalfunction,
-    Flag = "NULLGUIMalfunctionAutoStop",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.AutoStopMalfunction = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Cancel Ability with SharkTail",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.MalfunctionCancelWithSharkTail,
-    Flag = "NULLGUIMalfunctionSharkTailCancel",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionCancelWithSharkTail = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Additional SharkTail Cancel Delay",
-    Range = {0, 0.5},
-    Increment = 0.01,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.MalfunctionSharkTailCancelDelay,
-    Flag = "NULLGUIMalfunctionSharkTailCancelDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionSharkTailCancelDelay = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Cancel Ability with Jump",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.MalfunctionCancelWithJump,
-    Flag = "NULLGUIMalfunctionJumpCancel",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionCancelWithJump = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Delay When Ability Is Idle (0.5s Window)",
-    Range = {0, 0.5},
-    Increment = 0.01,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.MalfunctionIdleDelay,
-    Flag = "NULLGUIMalfunctionIdleDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionIdleDelay = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Delay When Ability Is Active (0.5s Window)",
-    Range = {0, 0.5},
-    Increment = 0.01,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.MalfunctionAbilityDelay,
-    Flag = "NULLGUIMalfunctionAbilityDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionAbilityDelay = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Input Release Duration (0.05s Minimum)",
-    Range = {0.05, 1},
-    Increment = 0.01,
-    CurrentValue = math.max(
-        celestialIntegration.Controller.EnemySafety.MalfunctionStopDuration,
-        0.05
-    ),
-    Flag = "NULLGUIMalfunctionStopDuration",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.MalfunctionStopDuration = math.max(
-            tonumber(value) or 0.05,
-            0.05
-        )
-    end
-})
-
-enemyTab:CreateSection("Kolona")
-enemyTab:CreateToggle({
-    Name = "Auto Use Ability at Required Number",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.AutoUseKolonaAbility,
-    Flag = "NULLGUIKolonaAutoAbility",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.AutoUseKolonaAbility = value
-    end
-})
-enemyTab:CreateDropdown({
-    Name = "Fallback Ability Input",
-    Options = {"MouseButton1", "Q", "E", "F", "R"},
-    CurrentOption = {celestialIntegration.Controller.EnemySafety.AbilityInput},
-    MultipleOptions = false,
-    Flag = "NULLGUIEnemySafetyAbilityInput",
-    Callback = function(options)
-        celestialIntegration.Controller.EnemySafety.AbilityInput = options[1] or "MouseButton1"
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Auto Ability Delay (0.3s Window)",
-    Range = {0, 0.3},
-    Increment = 0.01,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.KolonaAbilityDelay,
-    Flag = "NULLGUIKolonaAbilityDelay",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.KolonaAbilityDelay = value
-    end
-})
-enemyTab:CreateSlider({
-    Name = "Ability Press Duration",
-    Range = {0.01, 0.25},
-    Increment = 0.01,
-    CurrentValue = celestialIntegration.Controller.EnemySafety.KolonaAbilityDuration,
-    Flag = "NULLGUIKolonaAbilityDuration",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.KolonaAbilityDuration = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Friendly / Harmless",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.Friendly.kolona,
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.Friendly.kolona = value
-        celestialIntegration.Controller:RefreshSafetyFilter()
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.Kolona,
-    Callback = function(v)
-        auto_destroy.Kolona = v
-        local Kolona = enemies:FindFirstChild("Kolona") 
-        if Kolona then
-            handleEnemy(Kolona)
-        end
-    end
-})
-
-enemyTab:CreateSection("Nil (CURRENTLY REMOVED)")
---[[enemyTab:CreateToggle({
-    Name = "Auto Disable",
-    CurrentValue = auto_disable.nilEnemy,
-    Callback = function(v)
-        auto_disable.nilEnemy = v
-        local nilEnemy = enemies:FindFirstChild("nilEnemy") 
-        if nilEnemy then
-            handleEnemy(nilEnemy)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Break AI",
-    CurrentValue = auto_break.nilEnemy,
-    Callback = function(v)
-        auto_break.nilEnemy = v
-        local nilEnemy = enemies:FindFirstChild("nilEnemy") 
-        if nilEnemy then
-            handleEnemy(nilEnemy)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.nilEnemy,
-    Callback = function(v)
-        auto_destroy.nilEnemy = v
-        local nilEnemy = enemies:FindFirstChild("nilEnemy") 
-        if nilEnemy then
-            handleEnemy(nilEnemy)
-        end
-    end
-})]]
-enemyTab:CreateSection("Nil Mirage (Fake NILs) (CURRENTLY REMOVED)")
---[[enemyTab:CreateToggle({
-    Name = "Auto Disable",
-    CurrentValue = auto_disable.nilMirage,
-    Callback = function(v)
-        auto_disable.nilMirage = v
-        local nilMirage = enemies:FindFirstChild("nilMirage") 
-        if nilMirage then
-            handleEnemy(nilMirage)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Break AI",
-    CurrentValue = auto_break.nilMirage,
-    Callback = function(v)
-        auto_break.nilMirage = v
-        local nilMirage = enemies:FindFirstChild("nilMirage") 
-        if nilMirage then
-            handleEnemy(nilMirage)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.nilMirage,
-    Callback = function(v)
-        auto_destroy.nilMirage = v
-        local nilMirage = enemies:FindFirstChild("nilMirage") 
-        if nilMirage then
-            handleEnemy(nilMirage)
-        end
-    end
-})]]
-
-
-enemyTab:CreateSection("Telefragger")
-serverDisablerToggles.Telefragger = enemyTab:CreateToggle({
-    Name = "Auto Disable",
-    CurrentValue = auto_disable.Telefragger,
-    Callback = function(v)
-        auto_disable.Telefragger = v
-        local Telefragger = enemies:FindFirstChild("Telefragger") 
-        if Telefragger then
-            handleEnemy(Telefragger)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Break AI",
-    CurrentValue = auto_break.Telefragger,
-    Callback = function(v)
-        auto_break.Telefragger = v
-        local Telefragger = enemies:FindFirstChild("Telefragger") 
-        if Telefragger then
-            handleEnemy(Telefragger)
-        end
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.Telefragger,
-    Callback = function(v)
-        auto_destroy.Telefragger = v
-        local Telefragger = enemies:FindFirstChild("Telefragger") 
-        if Telefragger then
-            handleEnemy(Telefragger)
-        end
-    end
-})
-
-enemyTab:CreateSection("Sigil")
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.Sigil,
-    Callback = function(v)
-        auto_destroy.Sigil = v
-        local Sigil = enemies:FindFirstChild("Sigil") 
-        if Sigil then
-            handleEnemy(Sigil)
-        end
-    end
-})
-
-enemyTab:CreateSection("Voidbreaker")
-enemyTab:CreateToggle({
-    Name = "Auto Look Away",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.AutoLookAwayVoidbreaker,
-    Flag = "NULLGUIVoidbreakerAutoLookAway",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.AutoLookAwayVoidbreaker = value
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Make Voidbreaker Friendly / Harmless",
-    CurrentValue = celestialIntegration.Controller.EnemySafety.Friendly.voidbreaker,
-    Flag = "NULLGUIVoidbreakerFriendly",
-    Callback = function(value)
-        celestialIntegration.Controller.EnemySafety.Friendly.voidbreaker = value
-        celestialIntegration.Controller:RefreshSafetyFilter()
-    end
-})
-enemyTab:CreateToggle({
-    Name = "Auto Destroy",
-    CurrentValue = auto_destroy.Voidbreaker,
-    Callback = function(v)
-        auto_destroy.Voidbreaker = v
-        local Voidbreaker = enemies:FindFirstChild("Voidbreaker") 
-        if Voidbreaker then
-            handleEnemy(Voidbreaker)
-        end
-    end
-})
-
-enemyTab:CreateSection("Cadence")
-serverDisablerToggles.Cadence = enemyTab:CreateToggle({
-    Name = "Auto Disable",
-    CurrentValue = auto_disable.Cadence,
-    Callback = function(v)
-        auto_disable.Cadence = v
-        local Cadence = enemies:FindFirstChild("Cadence") 
-        if Cadence then
-            handleEnemy(Cadence)
-        end
-    end
-})
-enemyTab:CreateToggle({
 
