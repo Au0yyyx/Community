@@ -24,11 +24,15 @@ local aliases={
 local function key(s)return tostring(s):lower():gsub("[^%w\128-\255]","")end
 local byKey={}
 for _,u in ipairs(Upgrades)do byKey[key(u.name)]=u end
+local nullguiClientOnly={matrixtetrahedron=true,adrenaline=true,highlightgifts=true,advancedgravitycoil=true,sportshoes=true,theorb=true,realwings=true,gracewings=true,radarplayer=true,radarinstruments=true,highlighttripmines=true,iceskates=true,swiftnessring=true,giftmagnet=true,sharktail=true,enemyontop=true,pocketbell=true,ninjabelt=true,helmet=true,doublejump=true,radaraltars=true}
 local function ownedMap()
  local out={};local folder=RS:FindFirstChild("UpgradeFolder");folder=folder and folder:FindFirstChild("Upgrades")
  if not folder then return out end
  for _,v in ipairs(folder:GetChildren())do if v:IsA("ValueBase")then
-  local k=aliases[key(v.Name)]or key(v.Name);local u=byKey[k]
+  local rawKey=key(v.Name)
+  -- NULLGUI creates/edits these locally; they are not proof of a server purchase.
+  if Env.__NullShopIgnoreClientUpgrades~=false and nullguiClientOnly[rawKey] then continue end
+  local k=aliases[rawKey]or rawKey;local u=byKey[k]
   if u then local n=tonumber(v.Value)or 0;if u.name=="Gift Magnet"and n>u.max then n=math.ceil(n/20)end
    out[u.name]=math.max(out[u.name]or 0,math.clamp(n,0,u.max or 1))end
  end end;return out
