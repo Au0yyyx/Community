@@ -133,6 +133,7 @@ local function calculate()
  local best={score=-1,list={}};local spent=0;for m,v in pairs(dp)do if v.score>best.score then best=v;spent=m end end
  return s,choices,best,spent
 end
+App.Calculate=calculate;App.Upgrades=Upgrades
 
 local gui=Instance.new("ScreenGui");gui.Name="NullscapeShopAI";gui.ResetOnSpawn=false;gui.IgnoreGuiInset=true;gui.DisplayOrder=99999;gui.Parent=(gethui and gethui())or CoreGui
 local f=Instance.new("Frame");f.Size=UDim2.fromOffset(390,255);f.Position=UDim2.new(1,-405,.5,-128);f.BackgroundColor3=Color3.fromRGB(10,13,20);f.BackgroundTransparency=.08;f.BorderSizePixel=0;f.Active=true;f.Draggable=true;f.Visible=Env.__NullscapeShopAIEmbedded~=true;f.Parent=gui;Instance.new("UICorner",f).CornerRadius=UDim.new(0,10);App.Frame=f;App.Gui=gui
