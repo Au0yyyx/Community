@@ -1,3 +1,180 @@
+            end)
+        end
+
+        safeCall(function()
+            if not userInputService then
+                return
+            end
+
+            local mousePosition = userInputService:GetMouseLocation()
+            for buttonIndex = 0, 2 do
+                virtualInputManager:SendMouseButtonEvent(
+                    mousePosition.X,
+                    mousePosition.Y,
+                    buttonIndex,
+                    false,
+                    game,
+                    0
+                )
+            end
+        end)
+    end
+
+    function AutoStopController:ReleaseAbility(cancelMethods)
+        self:ReleaseKeys()
+        safeCall(self.Dependencies.ReleaseAbility, cancelMethods)
+        safeCall(self.Dependencies.ReleaseMovementInput)
+
+        local humanoid = self:GetParts()
+        if humanoid then
+            safeCall(function()
+                humanoid:SetAttribute("UsingAbility", false)
+                humanoid:SetAttribute("Sliding", false)
+                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
+            end)
+        end
+    end
+
+    function AutoStopController:Capture()
+        if self.Snapshot then
+            return
+        end
+
+        local controls = self:GetControls()
+        self.Snapshot = {
+            Controls = controls,
+            ControlsEnabled = readProperty(controls, "controlsEnabled"),
+        }
+    end
+
+    function AutoStopController:Apply(humanoid)
+        self:Capture()
+        if not self.AbilityReleased then
+            self:ReleaseAbility()
+            self.AbilityReleased = true
+        end
+
+        local controls = self:GetControls()
+        safeCall(function()
+            controls:Disable()
+        end)
+        safeCall(self.Dependencies.ReleaseMovementInput)
+
+        humanoid = humanoid or self:GetParts()
+        if humanoid then
+            safeCall(function()
+                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
+                humanoid:SetAttribute("UsingAbility", false)
+                humanoid:SetAttribute("Sliding", false)
+            end)
+        end
+
+        return true
+    end
+
+    function AutoStopController:Restore()
+        local snapshot = self.Snapshot
+        self.Snapshot = nil
+        self.Active = false
+        self.AbilityReleased = false
+
+        local runService = self.Dependencies.RunService
+        if runService then
+            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
+        end
+
+        if not snapshot then
+            self:ReleaseKeys()
+            return
+        end
+
+        if snapshot.Controls then
+            if snapshot.ControlsEnabled == false then
+                safeCall(function()
+                    snapshot.Controls:Disable()
+                end)
+            else
+                safeCall(function()
+                    snapshot.Controls:Enable()
+                end)
+            end
+        end
+
+        self:ReleaseKeys()
+        safeCall(self.Dependencies.OnRestored)
+    end
+
+    function AutoStopController:Finish()
+        self.Generation += 1
+        self.Deadline = 0
+
+        if self.HeartbeatConnection then
+            safeCall(function()
+                self.HeartbeatConnection:Disconnect()
+            end)
+            self.HeartbeatConnection = nil
+        end
+
+        self:Restore()
+    end
+
+    function AutoStopController:Cancel()
+        self.ScheduleGeneration += 1
+        self:Finish()
+    end
+
+    function AutoStopController:StopFor(duration, abilityAlreadyReleased)
+        duration = math.max(tonumber(duration) or 0, 0)
+        self.Generation += 1
+        local generation = self.Generation
+        self.Deadline = os.clock() + duration
+        self.Active = true
+        self.AbilityReleased = abilityAlreadyReleased == true
+
+        local runService = self.Dependencies.RunService
+        if runService then
+            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
+            runService:BindToRenderStep(
+                self.InputNeutralBindingName,
+                Enum.RenderPriority.Last.Value + 100,
+                function()
+                    if not self.Active then
+                        return
+                    end
+
+                    safeCall(self.Dependencies.ReleaseMovementInput)
+                    local currentHumanoid = self:GetParts()
+                    self:Apply(currentHumanoid)
+                end
+            )
+        end
+
+        if self.HeartbeatConnection then
+            safeCall(function()
+                self.HeartbeatConnection:Disconnect()
+            end)
+            self.HeartbeatConnection = nil
+        end
+
+        local humanoid = self:GetParts()
+        self:Apply(humanoid)
+        safeCall(self.Dependencies.OnStopped)
+
+        if runService and duration > 0 then
+            self.HeartbeatConnection = runService.Heartbeat:Connect(function()
+                if generation ~= self.Generation or not self.Active then
+                    return
+                end
+
+                if os.clock() >= self.Deadline then
+                    self:Finish()
+                    return
+                end
+
+                local currentHumanoid = self:GetParts()
+                self:Apply(currentHumanoid)
+            end)
+        elseif duration <= 0 then
             self:Finish()
         end
     end
@@ -970,138 +1147,4 @@ RunService:BindToRenderStep(
             or _G.VoidbreakerActive ~= true
         then
             return
-        end
-
-        local voidbreaker = enemies:FindFirstChild("Voidbreaker")
-        local currentCamera = workspace.CurrentCamera
-        if not voidbreaker or not currentCamera then
-            return
-        end
-
-        local awayDirection = currentCamera.CFrame.Position - voidbreaker.Position
-        if awayDirection.Magnitude <= 0.1 then
-            return
-        end
-
-        currentCamera.CFrame = CFrame.lookAt(
-            currentCamera.CFrame.Position,
-            currentCamera.CFrame.Position + awayDirection.Unit,
-            currentCamera.CFrame.UpVector
-        )
-    end
-)
-
-table.insert(celestialIntegration.Controller.Connections, workspace.DescendantAdded:Connect(function(descendant)
-    installEnemyCompatibility(descendant)
-end))
-
-for _, descendant in ipairs(enemies:GetDescendants()) do
-    installEnemyCompatibility(descendant)
-end
-
-if notifyRemote and notifyRemote:IsA("RemoteEvent") then
-    table.insert(celestialIntegration.Controller.Connections, notifyRemote.OnClientEvent:Connect(function(...)
-        celestialIntegration.Controller:HandleShieldNotification(...)
-    end))
-end
-
-if inRound then
-    table.insert(celestialIntegration.Controller.Connections, inRound.Changed:Connect(function(roundIsActive)
-        if roundIsActive == true then
-            return
-        end
-
-        celestialIntegration.Controller:SetSafetyToggle(false)
-    end))
-end
-
-task.spawn(createCelestialGiftCounter)
-end)()
-
-local enemyimage = "rbxassetid://90968042204988"
-local curseimage = "rbxassetid://71252790926685"
-local upgradeimage = "rbxassetid://109624131383272"
-
-local function checkIntermissionType()
-    selection = selection or workspace:FindFirstChild("Select")
-    local currentType = "ENEMIES"
-
-    if selection then
-        local imagelabel = safeFind(selection, {
-            "Sign",
-            "Billboard",
-            "ImageLabel"
-        })
-
-        if imagelabel then
-            if imagelabel.Image == enemyimage then
-                currentType = "ENEMIES"
-            elseif imagelabel.Image == curseimage then
-                currentType = "CURSES"
-            elseif imagelabel.Image == upgradeimage then
-                currentType = "UPGRADES"
-            end
-        end
-    end
-
-    return currentType
-end
-
-local closestGiftTracer = Drawing.new("Line")
-closestGiftTracer.Visible = false
-closestGiftTracer.Thickness = 2
-closestGiftTracer.Color = Color3.new(1, 1, 0)
-closestGiftTracer.Transparency = 1
-
-local medalTracer = Drawing.new("Line")
-medalTracer.Visible = false
-medalTracer.Thickness = 2
-medalTracer.Color = Color3.new(0.75, 0.75, 0.75)
-medalTracer.Transparency = 1
-
-local function getClosestAnyGift()
-    local char = getChar(plr)
-    local root = getRoot(char)
-    if not root then return end
-
-    local rootPos = root.Position
-    local closest, shortest = nil, math.huge
-
-    local function check(list)
-        for _, gift in ipairs(list) do
-            if gift and gift.Transparency == 0 and gift:FindFirstChild("Collect") ~= nil then
-                task.spawn(function()
-                    local diff = gift.Position - rootPos
-                    local dist = diff.Magnitude
-                
-                    if dist < shortest then
-                        shortest = dist
-                        closest = gift
-                    end
-                end)
-            end
-        end
-    end
-
-    check(availableNormalGifts)
-    check(availableGoldenGifts)
-
-    return closest
-end
-
-local lastRefresh = 0
-local scanIndex = 1
-local scanIndexTwo = 1
-local SCAN_SIZE = 100
-local normalList = {}
-local goldenList = {}
-
-local function updateGiftLists()
-    normalList = gifts:GetChildren()
-    goldenList = goldengifts:GetChildren()
-end
-
-table.insert(connections, gifts.ChildAdded:Connect(updateGiftLists))
-table.insert(connections, gifts.ChildRemoved:Connect(updateGiftLists))
-table.insert(connections, goldengifts.ChildAdded:Connect(updateGiftLists))
 
