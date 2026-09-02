@@ -990,10 +990,14 @@ for _, path in ipairs(addonPaths) do
     local ok, loadError = pcall(function()
         local source
         if fileName == "nosbloodhook.lua" then
-            -- The suite owns this corrected build instead of depending on a
-            -- potentially outdated local FartHub copy.
             source = game:HttpGet(
                 "https://raw.githubusercontent.com/Au0yyyx/Community/main/nosbloodhook.lua?t="
+                    .. tostring(os.time())
+            )
+        elseif fileName == "farthubsilentaim.lua" then
+            -- Always use the suite-owned build; local FartHub copies are stale.
+            source = game:HttpGet(
+                "https://raw.githubusercontent.com/Au0yyyx/Community/main/farthubsilentaim.lua?t="
                     .. tostring(os.time())
             )
         else
