@@ -1,3 +1,116 @@
+
+        local state = self.ScorchedStates[instance]
+        if not state then
+            state = {
+                Enabled = instance.Enabled,
+                Connections = {},
+            }
+            self.ScorchedStates[instance] = state
+
+            table.insert(state.Connections, instance:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if self.RemoveScorchedVisuals
+                    and self.ScorchedStates[instance] == state
+                    and instance.Parent
+                    and instance.Enabled then
+                    instance.Enabled = false
+                end
+            end))
+        end
+
+        instance.Enabled = false
+    end
+
+    function controller:RefreshScorchedVisuals()
+        if self.RemoveScorchedVisuals then
+            for _, descendant in ipairs(workspace:GetDescendants()) do
+                self:SuppressScorchedVisual(descendant)
+            end
+            return
+        end
+
+        local visuals = {}
+        for instance in pairs(self.ScorchedStates) do
+            table.insert(visuals, instance)
+        end
+        for _, instance in ipairs(visuals) do
+            self:RestoreScorchedVisual(instance)
+        end
+    end
+
+    function controller:IsLowPolyTarget(instance)
+        return instance:IsA("MeshPart")
+    end
+
+    function controller:ApplyLowPoly(instance)
+        if not self.LowPoly or not self:IsLowPolyTarget(instance) then
+            return
+        end
+
+        if self.LowPolyStates[instance] == nil then
+            self.LowPolyStates[instance] = instance.RenderFidelity
+        end
+
+        pcall(function()
+            instance.RenderFidelity = Enum.RenderFidelity.Performance
+        end)
+    end
+
+    function controller:RestoreLowPoly(instance)
+        local renderFidelity = self.LowPolyStates[instance]
+        if renderFidelity == nil then
+            return
+        end
+
+        self.LowPolyStates[instance] = nil
+        if instance.Parent then
+            pcall(function()
+                instance.RenderFidelity = renderFidelity
+            end)
+        end
+    end
+
+    function controller:RefreshLowPoly()
+        if self.LowPoly then
+            local processed = 0
+            for _, descendant in ipairs(workspace:GetDescendants()) do
+                if not self.LowPoly or self.Destroyed then
+                    return
+                end
+                if self:IsLowPolyTarget(descendant) then
+                    self:ApplyLowPoly(descendant)
+                    processed += 1
+                    if processed % 300 == 0 then
+                        task.wait()
+                    end
+                end
+            end
+            return
+        end
+
+        local instances = {}
+        for instance in pairs(self.LowPolyStates) do
+            table.insert(instances, instance)
+        end
+        for index, instance in ipairs(instances) do
+            self:RestoreLowPoly(instance)
+            if index % 300 == 0 then
+                task.wait()
+            end
+        end
+    end
+
+    function controller:DestroyCadenceVisual(instrument)
+        local visual = self.CadenceVisuals[instrument]
+        if not visual then
+            return
+        end
+
+        if visual.ChamFill then
+            visual.ChamFill:Destroy()
+        end
+        if visual.ChamOutline then
+            visual.ChamOutline:Destroy()
+        end
         if visual.Arrow then
             visual.Arrow:Destroy()
         end
@@ -1034,181 +1147,4 @@ local autoStopController = (function()
         for _, keyCode in ipairs(keysToRelease) do
             safeCall(function()
                 virtualInputManager:SendKeyEvent(false, keyCode, false, game)
-            end)
-        end
-
-        safeCall(function()
-            if not userInputService then
-                return
-            end
-
-            local mousePosition = userInputService:GetMouseLocation()
-            for buttonIndex = 0, 2 do
-                virtualInputManager:SendMouseButtonEvent(
-                    mousePosition.X,
-                    mousePosition.Y,
-                    buttonIndex,
-                    false,
-                    game,
-                    0
-                )
-            end
-        end)
-    end
-
-    function AutoStopController:ReleaseAbility(cancelMethods)
-        self:ReleaseKeys()
-        safeCall(self.Dependencies.ReleaseAbility, cancelMethods)
-        safeCall(self.Dependencies.ReleaseMovementInput)
-
-        local humanoid = self:GetParts()
-        if humanoid then
-            safeCall(function()
-                humanoid:SetAttribute("UsingAbility", false)
-                humanoid:SetAttribute("Sliding", false)
-                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
-            end)
-        end
-    end
-
-    function AutoStopController:Capture()
-        if self.Snapshot then
-            return
-        end
-
-        local controls = self:GetControls()
-        self.Snapshot = {
-            Controls = controls,
-            ControlsEnabled = readProperty(controls, "controlsEnabled"),
-        }
-    end
-
-    function AutoStopController:Apply(humanoid)
-        self:Capture()
-        if not self.AbilityReleased then
-            self:ReleaseAbility()
-            self.AbilityReleased = true
-        end
-
-        local controls = self:GetControls()
-        safeCall(function()
-            controls:Disable()
-        end)
-        safeCall(self.Dependencies.ReleaseMovementInput)
-
-        humanoid = humanoid or self:GetParts()
-        if humanoid then
-            safeCall(function()
-                humanoid:SetAttribute("PlayerMoveDirection", Vector3.zero)
-                humanoid:SetAttribute("UsingAbility", false)
-                humanoid:SetAttribute("Sliding", false)
-            end)
-        end
-
-        return true
-    end
-
-    function AutoStopController:Restore()
-        local snapshot = self.Snapshot
-        self.Snapshot = nil
-        self.Active = false
-        self.AbilityReleased = false
-
-        local runService = self.Dependencies.RunService
-        if runService then
-            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
-        end
-
-        if not snapshot then
-            self:ReleaseKeys()
-            return
-        end
-
-        if snapshot.Controls then
-            if snapshot.ControlsEnabled == false then
-                safeCall(function()
-                    snapshot.Controls:Disable()
-                end)
-            else
-                safeCall(function()
-                    snapshot.Controls:Enable()
-                end)
-            end
-        end
-
-        self:ReleaseKeys()
-        safeCall(self.Dependencies.OnRestored)
-    end
-
-    function AutoStopController:Finish()
-        self.Generation += 1
-        self.Deadline = 0
-
-        if self.HeartbeatConnection then
-            safeCall(function()
-                self.HeartbeatConnection:Disconnect()
-            end)
-            self.HeartbeatConnection = nil
-        end
-
-        self:Restore()
-    end
-
-    function AutoStopController:Cancel()
-        self.ScheduleGeneration += 1
-        self:Finish()
-    end
-
-    function AutoStopController:StopFor(duration, abilityAlreadyReleased)
-        duration = math.max(tonumber(duration) or 0, 0)
-        self.Generation += 1
-        local generation = self.Generation
-        self.Deadline = os.clock() + duration
-        self.Active = true
-        self.AbilityReleased = abilityAlreadyReleased == true
-
-        local runService = self.Dependencies.RunService
-        if runService then
-            runService:UnbindFromRenderStep(self.InputNeutralBindingName)
-            runService:BindToRenderStep(
-                self.InputNeutralBindingName,
-                Enum.RenderPriority.Last.Value + 100,
-                function()
-                    if not self.Active then
-                        return
-                    end
-
-                    safeCall(self.Dependencies.ReleaseMovementInput)
-                    local currentHumanoid = self:GetParts()
-                    self:Apply(currentHumanoid)
-                end
-            )
-        end
-
-        if self.HeartbeatConnection then
-            safeCall(function()
-                self.HeartbeatConnection:Disconnect()
-            end)
-            self.HeartbeatConnection = nil
-        end
-
-        local humanoid = self:GetParts()
-        self:Apply(humanoid)
-        safeCall(self.Dependencies.OnStopped)
-
-        if runService and duration > 0 then
-            self.HeartbeatConnection = runService.Heartbeat:Connect(function()
-                if generation ~= self.Generation or not self.Active then
-                    return
-                end
-
-                if os.clock() >= self.Deadline then
-                    self:Finish()
-                    return
-                end
-
-                local currentHumanoid = self:GetParts()
-                self:Apply(currentHumanoid)
-            end)
-        elseif duration <= 0 then
 
