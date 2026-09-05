@@ -226,40 +226,9 @@ Controller.ReplacementGetMousePos = replacementGetMousePos
 
 -- Current Forsaken routes many abilities through Util:GetPlayerMousePosition.
 -- Hook that public wrapper too, and keep both hooks alive if another addon reloads.
-local Util = require(ReplicatedStorage.Modules.Utilities.Util)
-local originalUtilGetMouse = Util.GetPlayerMousePosition
-local replacementUtilGetMouse
-replacementUtilGetMouse = function(self, player, ...)
-    if player == LocalPlayer then
-        local position = getSilentAimPosition(select(1, ...))
-        if position then
-            return position
-        end
-    end
-    return originalUtilGetMouse(self, player, ...)
-end
-local utilWritable = pcall(function()
-    Util.GetPlayerMousePosition = replacementUtilGetMouse
-end)
-local utilHooked = false
-if not utilWritable then
-    assert(type(hookfunction) == "function", "Util table is readonly and hookfunction is unavailable")
-    originalUtilGetMouse = hookfunction(Util.GetPlayerMousePosition, replacementUtilGetMouse)
-    utilHooked = true
-end
-Controller.OriginalUtilGetMouse = originalUtilGetMouse
-Controller.ReplacementUtilGetMouse = replacementUtilGetMouse
-
-table.insert(Controller.Connections, RunService.Heartbeat:Connect(function()
-    if Controller.Destroyed then return end
-    if MouseProvider.GetMousePos ~= replacementGetMousePos then
-        MouseProvider.GetMousePos = replacementGetMousePos
-    end
-    if utilWritable and Util.GetPlayerMousePosition ~= replacementUtilGetMouse then
-        pcall(function() Util.GetPlayerMousePosition = replacementUtilGetMouse end)
-    end
-end))
-
+-- The current Util export is readonly. MouseProvider is the writable public provider
+-- used by ability code, so avoid mutating Util and keep the addon compatible.
+local Util = nil
 local fovCircle
 if type(Drawing) == "table" and type(Drawing.new) == "function" then
     local succeeded, circle = pcall(Drawing.new, "Circle")
@@ -406,11 +375,6 @@ function Controller:Destroy()
 
     if MouseProvider.GetMousePos == self.ReplacementGetMousePos then
         MouseProvider.GetMousePos = self.OriginalGetMousePos
-    end
-    if utilHooked and type(hookfunction) == "function" then
-        pcall(hookfunction, Util.GetPlayerMousePosition, self.OriginalUtilGetMouse)
-    elseif Util.GetPlayerMousePosition == self.ReplacementUtilGetMouse then
-        pcall(function() Util.GetPlayerMousePosition = self.OriginalUtilGetMouse end)
     end
 
     for _, connection in ipairs(self.Connections) do
