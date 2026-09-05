@@ -1077,7 +1077,9 @@ for _, path in ipairs(addonPaths) do
     if fileName == "farthubsilentaim.lua" then
         addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@bd0fb176854b931a92a9e14e789c694c367b0674/farthubsilentaim.lua"
     end
-    local ok, source = pcall(game.HttpGet, game, addonUrl)
+    local ok, source = pcall(function()
+        return game:HttpGet(addonUrl)
+    end)
     addonSources[fileName] = ok and source or nil
 end
 for _, path in ipairs(addonPaths) do
