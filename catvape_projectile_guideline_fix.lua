@@ -66,5 +66,3 @@ function Controller:Destroy()
     if Env[KEY] == self then Env[KEY] = nil end
 end
 
-print("[CatVape] projectile guideline compatibility loaded")
-
