@@ -68,7 +68,9 @@ local Controller = {
         WallCheck = true,
         HighNovaHeight = 5,
         AutoDetonate = false,
-        AutoDetonateRadius = 17.25
+        AutoDetonateRadius = 17.25,
+        AimSurvivors = true,
+        AimKillers = false
     }
 }
 Environment[ADDON_KEY] = Controller
@@ -127,17 +129,20 @@ local function getAimPoint(model)
     return root.Position, root.AssemblyLinearVelocity
 end
 
-local function getTargetFolder(actor)
+local function getTargetFolders(actor)
     local playersFolder = workspace:FindFirstChild("Players")
-    if not playersFolder or not actor.Rig.Parent then
-        return nil
+    if not playersFolder then return {} end
+    local folders = {}
+    if Controller.Settings.AimSurvivors then
+        local survivors = playersFolder:FindFirstChild("Survivors")
+        if survivors then table.insert(folders, survivors) end
     end
-    if actor.Rig.Parent.Name == "Killers" then
-        return playersFolder:FindFirstChild("Survivors")
+    -- Only Dusekkar has a projectile that can validly use killer targets.
+    if Controller.Settings.AimKillers and actor.ActorName == "Dusekkar" then
+        local killers = playersFolder:FindFirstChild("Killers")
+        if killers then table.insert(folders, killers) end
     end
-    if actor.Rig.Parent.Name == "Survivors" then
-        return playersFolder:FindFirstChild("Killers")
-    end
+    return folders
 end
 
 local function hasLineOfSight(actorRig, targetModel, origin, targetPosition)
@@ -154,8 +159,8 @@ end
 local function findTarget(actor, projectileSpeed)
     local camera = workspace.CurrentCamera
     local originPart = getRoot(actor.Rig)
-    local targetFolder = getTargetFolder(actor)
-    if not camera or not originPart or not targetFolder then
+    local targetFolders = getTargetFolders(actor)
+    if not camera or not originPart then
         return nil
     end
 
@@ -165,8 +170,9 @@ local function findTarget(actor, projectileSpeed)
     local bestVelocity
     local bestScore = math.huge
 
-    for _, model in ipairs(targetFolder:GetChildren()) do
-        if model ~= LocalPlayer.Character and isAlive(model) then
+    for _, targetFolder in ipairs(targetFolders) do
+      for _, model in ipairs(targetFolder:GetChildren()) do
+        if model ~= LocalPlayer.Character and model ~= actor.Rig and isAlive(model) then
             local position, velocity = getAimPoint(model)
             if position then
                 local screenPoint, visible = camera:WorldToScreenPoint(position)
@@ -183,6 +189,7 @@ local function findTarget(actor, projectileSpeed)
                 end
             end
         end
+    end
     end
     return bestModel, bestPosition, bestVelocity
 end
@@ -271,6 +278,7 @@ table.insert(Controller.Connections, RunService.Heartbeat:Connect(function()
             pressNovaKey()
             break
         end
+      end
     end
 end))
 
@@ -406,6 +414,17 @@ local wallCheckToggle = MainGroup:AddToggle("FartHubStandaloneSilentAimWallCheck
     end
 })
 table.insert(Controller.Controls, wallCheckToggle)
+
+local aimSurvivorsToggle = MainGroup:AddToggle("FartHubSilentAimSurvivors", {
+    Text = "Aim at survivors", Default = Controller.Settings.AimSurvivors,
+    Callback = function(value) Controller.Settings.AimSurvivors = value end
+})
+table.insert(Controller.Controls, aimSurvivorsToggle)
+local aimKillersToggle = MainGroup:AddToggle("FartHubSilentAimKillers", {
+    Text = "Aim at killers (Dusekkar only)", Default = Controller.Settings.AimKillers,
+    Callback = function(value) Controller.Settings.AimKillers = value end
+})
+table.insert(Controller.Controls, aimKillersToggle)
 
 local autoDetonateToggle = MainGroup:AddToggle("FartHubStandaloneAutoDetonate", {
     Text = "Auto Detonate Nova",
