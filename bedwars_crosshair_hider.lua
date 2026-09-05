@@ -8,7 +8,6 @@ end
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local LP = Players.LocalPlayer
 local Mouse = LP:GetMouse()
@@ -55,6 +54,9 @@ local function hide(instance)
         Hider.Hidden[instance] = instance.Visible
     end
     instance.Visible = false
+    Hider.Connections[#Hider.Connections + 1] = instance:GetPropertyChangedSignal("Visible"):Connect(function()
+        if instance.Parent and instance.Visible then instance.Visible = false end
+    end)
 end
 
 local function scan(root)
@@ -81,15 +83,12 @@ pcall(function()
     end)
 end)
 
-local lastScan = 0
-Hider.Connections[#Hider.Connections + 1] = RunService.RenderStepped:Connect(function()
-    UIS.MouseIconEnabled = false
-    Mouse.Icon = ""
-    if os.clock() - lastScan >= 0.25 then
-        lastScan = os.clock()
-        scan(LP.PlayerGui)
-        scan(CoreGui)
-    end
+Hider.Connections[#Hider.Connections + 1] = UIS:GetPropertyChangedSignal("MouseIconEnabled"):Connect(function()
+    if UIS.MouseIconEnabled then UIS.MouseIconEnabled = false end
+end)
+
+Hider.Connections[#Hider.Connections + 1] = Mouse:GetPropertyChangedSignal("Icon"):Connect(function()
+    if Mouse.Icon ~= "" then Mouse.Icon = "" end
 end)
 
 function Hider:Destroy()
@@ -112,5 +111,4 @@ function Hider:Destroy()
         env.__CrosshairHider = nil
     end
 end
-
 
