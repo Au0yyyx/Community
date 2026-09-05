@@ -57,7 +57,7 @@ local Controller = {
     LastFingerprint = nil,
     Settings = {
         Enabled = false,
-        InputDelay = 0.1
+        InputDelay = 0.025
     }
 }
 Environment[ADDON_KEY] = Controller
@@ -210,10 +210,9 @@ local function isPromptScope(instance)
             return false
         end
         for _, hint in ipairs(SCOPE_HINTS) do
-            if name:find(hint, 1, true) then
-                return true
-            end
+            if name:find(hint, 1, true) then return true end
         end
+        if current:IsA("TextLabel") and compact(current.Text):find("reelitin", 1, true) then return true end
         current = current.Parent
     end
     return false
@@ -262,6 +261,17 @@ local function inspectInstance(instance)
 end
 
 local function findPrompt()
+    local temporary = PlayerGui:FindFirstChild("TemporaryUI")
+    if temporary then
+        for _, instance in ipairs(temporary:GetDescendants()) do
+            if (instance:IsA("TextLabel") or instance:IsA("TextButton")) and isVisible(instance) then
+                local keyCode = keyFromText(instance.Text)
+                if keyCode and isPromptScope(instance) then
+                    return instance, keyCode, fingerprint(instance, keyCode)
+                end
+            end
+        end
+    end
     for instance in pairs(Controller.Candidates) do
         if not instance.Parent then
             Controller.Candidates[instance] = nil
@@ -294,8 +304,10 @@ end
 
 local function pulseKey(keyCode)
     VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-    task.wait(0.035)
+    if type(keypress) == "function" then pcall(keypress, keyCode.Value) end
+    task.wait(0.045)
     VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    if type(keyrelease) == "function" then pcall(keyrelease, keyCode.Value) end
 end
 
 local function scheduleInput(instance, keyCode, promptFingerprint)
@@ -360,11 +372,11 @@ local function update()
     end
 end
 
-local Groupbox = AddonsTab:AddRightGroupbox("Nosferatu Minigame")
+local Groupbox = AddonsTab:AddRightGroupbox("Nosferatu Bloodhook QTE")
 Controller.Groupbox = Groupbox
 
 local enabledToggle = Groupbox:AddToggle("FartHubAutoNosferatuMinigame", {
-    Text = "Auto Nosferatu Minigame",
+    Text = "Auto Bloodhook QTE",
     Default = Controller.Settings.Enabled,
     Callback = function(value)
         Controller.Settings.Enabled = value
@@ -434,3 +446,4 @@ if type(Library.OnUnload) == "function" then
 end
 
 print("[FartHub Addon] Auto Nosferatu Minigame loaded")
+
