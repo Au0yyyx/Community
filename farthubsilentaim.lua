@@ -55,13 +55,9 @@ local Controller = {
             c00lkidd = true,
             Dusekkar = true,
             Noli = true,
-            JaneDoe = true,
-            Sixer = true,
-            Nosferatwo = true,
+            JaneDoe = true,            Nosferatwo = true,
             Azure = true,
-            ["1x1x1x1"] = true,
-            Slasher = true,
-            Nova = true
+            ["1x1x1x1"] = true,            Nova = true
         },
         Prediction = 2.5,
         AimPart = "Torso",
@@ -268,7 +264,7 @@ local enabledToggle = MainGroup:AddToggle("FartHubStandaloneSilentAim", {
 })
 table.insert(Controller.Controls, enabledToggle)
 
-for _, characterName in ipairs({ "c00lkidd", "Dusekkar", "Noli", "JaneDoe", "Sixer", "Nosferatwo", "Azure", "1x1x1x1", "Slasher", "Nova" }) do
+for _, characterName in ipairs({ "c00lkidd", "Dusekkar", "Noli", "JaneDoe", "Nosferatwo", "Azure", "1x1x1x1", "Nova" }) do
     local toggle = MainGroup:AddToggle("FartHubStandaloneSilentAim_" .. characterName, {
         Text = characterName,
         Default = Controller.Settings.Characters[characterName],
