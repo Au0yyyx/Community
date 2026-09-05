@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AbilityAim=false,AbilitySilent=true,AbilityPrediction=.12,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -36,10 +36,10 @@ local function item(m)
  v={H=h,B=b,T=t,R=ring};App.Items[m]=v;return v
 end
 local function clear(m)local v=App.Items[m];if not v then return end;for _,x in pairs(v)do pcall(x.Destroy,x)end;App.Items[m]=nil end
-local function target()
+local function target(autoEnemy)
  local cam=workspace.CurrentCamera;local pf=playersFolder();local mr=root(LP.Character);if not cam or not pf or not mr then return end
  local mouse=UIS:GetMouseLocation();local best,score
- for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r and alive(m) and wanted(m) then
+ for _,m in ipairs(pf:GetChildren())do local r=root(m);local valid=autoEnemy and m:GetAttribute("Team")~=myTeam() or wanted(m);if m~=LP.Character and r and alive(m) and valid then
   local p,on=cam:WorldToViewportPoint(r.Position);local s=(Vector2.new(p.X,p.Y)-mouse).Magnitude
   if on and s<=App.Settings.AimFOV and (not score or s<score) then
    local clear=true;if App.Settings.Wall then local rp=RaycastParams.new();rp.FilterType=Enum.RaycastFilterType.Exclude;rp.FilterDescendantsInstances={LP.Character,m};clear=workspace:Raycast(cam.CFrame.Position,r.Position-cam.CFrame.Position,rp)==nil end
@@ -54,6 +54,11 @@ App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
 end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMChams",{Text="Chams",Default=false,Callback=function(v)App.Settings.Chams=v end});e:AddToggle("OMCharacterESP",{Text="Character ESP (Sonic/Amy/etc.)",Default=true,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Player name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="State/life ESP",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
 local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Generic silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMTailsCannonSilent",{Text="Tails cannon silent aim",Default=false,Callback=function(v)App.Settings.TailsCannonSilentAim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
+local abilityBox=Tabs.Aim:AddRightGroupbox("All Ability Aim")
+abilityBox:AddToggle("OMAbilityAim",{Text="Aim assist for every ability",Default=false,Callback=function(v)App.Settings.AbilityAim=v end})
+abilityBox:AddToggle("OMAbilitySilent",{Text="Silent aim mouse abilities",Default=true,Callback=function(v)App.Settings.AbilitySilent=v end})
+abilityBox:AddSlider("OMAbilityPrediction",{Text="Ability prediction",Default=.12,Min=0,Max=1,Rounding=4,Suffix="s",Callback=function(v)App.Settings.AbilityPrediction=v end})
+abilityBox:AddLabel("Automatically targets the opposing team. Mouse-position abilities are redirected without moving the camera.",true)
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
 
 -- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
@@ -113,15 +118,22 @@ App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
  h.WalkSpeed=(speedBase or h.WalkSpeed)*App.Settings.SpeedMultiplier
 end)
 
--- Generic OM projectile/move silent aim. Only rewrites spatial arguments on
--- attack-like remotes and leaves ordinary networking untouched.
+-- Ability-aware aim: every ClientMoveset remote targets the opposing team.
+-- Spatial/mouse arguments are rewritten silently; direction-only moves face the target.
 local oldNamecall
 if type(hookmetamethod)=="function" and type(newcclosure)=="function" then
  oldNamecall=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
   local method=getnamecallmethod();local args={...}
- if (App.Settings.SilentAim or App.Settings.TailsCannonSilentAim) and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
-   local remoteName=tostring(self.Name):lower();local attackRemote=remoteName:find("attack",1,true) or remoteName:find("move",1,true) or remoteName:find("projectile",1,true) or remoteName=="onclient"
-   if attackRemote then local m=target();local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*.12;local char=LP.Character;local isTails=char and char:GetAttribute("Character")=="Tails";if App.Settings.TailsCannonSilentAim and isTails and root(char) then local rr=root(char);rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z)) end;if App.Settings.SilentAim or (App.Settings.TailsCannonSilentAim and isTails) then for i,x in ipairs(args)do if typeof(x)=="Vector3" then args[i]=predicted elseif typeof(x)=="CFrame" then args[i]=CFrame.lookAt(x.Position,predicted) end end;return oldNamecall(self,table.unpack(args)) end end end
+ if (App.Settings.AbilityAim or App.Settings.SilentAim or App.Settings.TailsCannonSilentAim) and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
+   local remoteName=tostring(self.Name):lower();local full="";pcall(function()full=self:GetFullName():lower()end);local caller="";if type(getcallingscript)=="function" then pcall(function()local s=getcallingscript();caller=s and s:GetFullName():lower() or "" end)end
+   local abilityRemote=remoteName=="onclient" or full:find("clientmoveset",1,true) or caller:find("clientmoveset",1,true)
+   local attackRemote=abilityRemote or remoteName:find("attack",1,true) or remoteName:find("move",1,true) or remoteName:find("projectile",1,true)
+   if attackRemote then local m=target(App.Settings.AbilityAim);local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*App.Settings.AbilityPrediction;local char=LP.Character;local rr=root(char);local isTails=char and char:GetAttribute("Character")=="Tails";local changed=false
+    local function rewrite(x,depth) local ty=typeof(x);if ty=="Vector3" then changed=true;return predicted elseif ty=="CFrame" then changed=true;return CFrame.lookAt(x.Position,predicted) elseif ty=="Ray" then changed=true;local d=predicted-x.Origin;return Ray.new(x.Origin,d.Magnitude>0 and d.Unit*x.Direction.Magnitude or x.Direction) elseif type(x)=="table" and depth<3 then local o={};for k,v in pairs(x)do local key=tostring(k):lower();if key:find("target",1,true) or key:find("mouse",1,true) or key:find("position",1,true) or key:find("direction",1,true) or key:find("look",1,true) or key:find("hit",1,true) or key:find("aim",1,true) then o[k]=rewrite(v,depth+1) else o[k]=v end end;return o end;return x end
+    if App.Settings.AbilityAim and App.Settings.AbilitySilent or App.Settings.SilentAim or (App.Settings.TailsCannonSilentAim and isTails) then for i,x in ipairs(args)do args[i]=rewrite(x,0) end end
+    if rr and ((App.Settings.AbilityAim and not changed) or (App.Settings.TailsCannonSilentAim and isTails)) then rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z)) end
+    if changed or App.Settings.AbilityAim or (App.Settings.TailsCannonSilentAim and isTails) then return oldNamecall(self,table.unpack(args)) end
+   end end
   end
   return oldNamecall(self,...)
  end))
@@ -147,6 +159,35 @@ App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
  if not danger and pf then for _,m in ipairs(pf:GetChildren())do local er=root(m);if m:GetAttribute("Team")=="EXE" and er and (er.Position-me.Position).Magnitude<=App.Settings.BlockRange and attackActive(m) then danger=true;break end end end
  if danger then lastBlock=os.clock();local key=Enum.KeyCode[App.Settings.BlockKey] or Enum.KeyCode.F;task.delay(App.Settings.BlockDelay,function()if not App.Settings.AutoBlock then return end;VIM:SendKeyEvent(true,key,false,game);task.delay(App.Settings.BlockHold,function()VIM:SendKeyEvent(false,key,false,game)end)end)end
 end)
+
+-- 2011x quick-time prompts. Supports text, prompt names, and key attributes.
+local qteBox=Tabs.Aim:AddRightGroupbox("2011x QTE")
+qteBox:AddToggle("OMAuto2011QTE",{Text="Auto 2011x QTE",Default=false,Callback=function(x)App.Settings.Auto2011QTE=x end})
+qteBox:AddSlider("OM2011QTEDelay",{Text="Input delay",Default=.08,Min=0,Max=2,Rounding=4,Suffix="s",Callback=function(x)App.Settings.QTEDelay=x end})
+local keyAliases={SPACE="Space",SPACEBAR="Space",UP="Up",DOWN="Down",LEFT="Left",RIGHT="Right",LMB="MouseButton1",RMB="MouseButton2"}
+local qteSeen=setmetatable({},{__mode="k"});local qteToken=0
+local function qteKey(v)
+ if typeof(v)=="EnumItem" and v.EnumType==Enum.KeyCode then return v end
+ local s=tostring(v or ""):upper():gsub("ENUM.KEYCODE.",""):gsub("[^%w]","");s=keyAliases[s] or s
+ return Enum.KeyCode[s] or (#s==1 and Enum.KeyCode[s])
+end
+local function has2011()local pf=playersFolder();if not pf then return false end;for _,m in ipairs(pf:GetChildren())do if tostring(m:GetAttribute("Character")):lower()=="2011x" then return true end end;return false end
+local function visibleGui(x)local p=x;while p and p~=LP.PlayerGui do if p:IsA("GuiObject") and not p.Visible then return false end;if p:IsA("LayerCollector") and not p.Enabled then return false end;p=p.Parent end;return p==LP.PlayerGui end
+local function qteScope(x)local p=x;while p and p~=LP.PlayerGui do local n=p.Name:lower();if n:find("2011",1,true) or n:find("qte",1,true) or n:find("quicktime",1,true) or n:find("struggle",1,true) or n:find("escape",1,true) or n:find("keyprompt",1,true) then return true end;p=p.Parent end;return false end
+local function inspectQTE(x)
+ if not visibleGui(x) then return end
+ for n,v in pairs(x:GetAttributes())do local k=n:lower();if k:find("key",1,true) or k:find("input",1,true) or k:find("button",1,true) then local code=qteKey(v);if code then return code end end end
+ local value=x:IsA("ValueBase") and x.Value or ((x:IsA("TextLabel") or x:IsA("TextButton") or x:IsA("TextBox")) and x.Text or x.Name)
+ local raw=tostring(value or "");local token=raw:match("[%[%(]?([WASDQERFZXCV])[%]%)]?") or raw:match("[Pp][Rr][Ee][Ss][Ss]%s+([%w]+)") or raw:match("[Tt][Aa][Pp]%s+([%w]+)") or raw:match("^%s*([%w]+)%s*$")
+ return token and qteKey(token)
+end
+local function considerQTE(x)
+ if not App.Settings.Auto2011QTE or qteSeen[x] or not has2011() or not (qteScope(x) or x:FindFirstAncestor("TemporaryUI")) then return end
+ local code=inspectQTE(x);if not code then return end;qteSeen[x]=true;qteToken+=1;local token=qteToken
+ task.delay(App.Settings.QTEDelay,function()if not App.Settings.Auto2011QTE or token~=qteToken or not x.Parent or not visibleGui(x) then return end;VIM:SendKeyEvent(true,code,false,game);if type(keypress)=="function" then pcall(keypress,code.Value)end;task.wait(.04);VIM:SendKeyEvent(false,code,false,game);if type(keyrelease)=="function" then pcall(keyrelease,code.Value)end end)
+end
+App.Connections[#App.Connections+1]=LP.PlayerGui.DescendantAdded:Connect(function(x)task.defer(considerQTE,x)end)
+App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()if not App.Settings.Auto2011QTE then return end;local temp=LP.PlayerGui:FindFirstChild("TemporaryUI");if temp then for _,x in ipairs(temp:GetDescendants())do considerQTE(x)end end end)
 
 local lastInfo=0
 App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
