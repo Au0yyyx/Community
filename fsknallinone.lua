@@ -1082,7 +1082,7 @@ for _, path in ipairs(addonPaths) do
     local addonUrl = "https://raw.githubusercontent.com/Au0yyyx/Community/main/"
         .. fileName .. "?t=" .. tostring(os.clock())
     if fileName == "farthubsilentaim.lua" then
-        addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@aa3e84e8c3972cab6a82ff7657afbc08725eb56f/farthubsilentaim.lua"
+        addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@9bb86ac9e0a56101a76564543a12176f81aad0b4/farthubsilentaim.lua"
     end
     local ok, source = pcall(function()
         return httpGet(addonUrl)
