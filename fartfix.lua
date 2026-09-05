@@ -136,6 +136,5 @@ function Controller:Destroy()
 end
 
 repairRecursiveHooks()
-print("[FartHub Fix] Network recursion and character replication repaired")
 
 
