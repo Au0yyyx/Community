@@ -1070,9 +1070,12 @@ for _, path in ipairs(addonPaths) do
     local fileName = path:match("[^\\/]+$") or path
     local ok, loadError = pcall(function()
         local source
-        source = game:HttpGet(
-            "https://raw.githubusercontent.com/Au0yyyx/Community/main/" .. fileName .. "?t=" .. tostring(os.time())
-        )
+        local addonUrl = "https://raw.githubusercontent.com/Au0yyyx/Community/main/"
+            .. fileName .. "?t=" .. tostring(os.clock())
+        if fileName == "farthubsilentaim.lua" then
+            addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@8d3656793909f21b87c854de4521382848a22993/farthubsilentaim.lua"
+        end
+        source = game:HttpGet(addonUrl)
         assert(type(source) == "string", "addon source was unavailable")
         source = source:gsub(
             "local Library = findFartHubLibrary%(30%)",
