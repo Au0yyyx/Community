@@ -445,5 +445,4 @@ if type(Library.OnUnload) == "function" then
     end)
 end
 
-print("[FartHub Addon] Auto Nosferatu Minigame loaded")
 
