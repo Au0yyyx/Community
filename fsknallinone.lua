@@ -1071,7 +1071,7 @@ for _, path in ipairs(addonPaths) do
         local addonUrl = "https://raw.githubusercontent.com/Au0yyyx/Community/main/"
             .. fileName .. "?t=" .. tostring(os.clock())
         if fileName == "farthubsilentaim.lua" then
-            addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@9329a30ee1c646b5a1cbc34ecfa7df9efba81a02/farthubsilentaim.lua"
+            addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@bd0fb176854b931a92a9e14e789c694c367b0674/farthubsilentaim.lua"
         end
         source = game:HttpGet(addonUrl)
         assert(type(source) == "string", "addon source was unavailable")
