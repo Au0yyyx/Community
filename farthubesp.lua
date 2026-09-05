@@ -426,5 +426,4 @@ end
 
 scanObjects()
 updateVisuals()
-print("[FartHub Addon] Plant and Digital Footprint ESP loaded")
 
