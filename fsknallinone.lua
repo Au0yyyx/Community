@@ -139,6 +139,7 @@ local function loadTwoTimeAutoBackstab()
             Mode = "Behind",
             Range = 7,
             Guaranteed = false,
+            AimMode = "Character",
             BehindDistance = 2.25,
             CorrectionTiming = 0.03,
             CorrectionHold = 0.28
@@ -335,12 +336,17 @@ local function loadTwoTimeAutoBackstab()
                 task.spawn(maintainAndRestoreTeleport, teleportData, now)
                 task.wait(AutoStab.Settings.CorrectionTiming)
             else
-                faceTarget(localRoot, targetRoot)
+                aimForBackstab(localRoot, targetRoot)
             end
         else
             faceTarget(localRoot, targetRoot)
         end
 
+        -- Keep camera aiming synchronized with the actual dagger request, including
+        -- the guaranteed-hitbox correction path.
+        if AutoStab.Settings.AimMode == "Camera" or AutoStab.Settings.AimMode == "Both" then
+            aimForBackstab(localRoot, targetRoot)
+        end
         Network:FireServerConnection("UseActorAbility", "REMOTE_EVENT", "Dagger")
     end
 
@@ -388,6 +394,15 @@ local function loadTwoTimeAutoBackstab()
         end
     })
     table.insert(AutoStab.Controls, modeDropdown)
+
+    local aimModeDropdown = Groupbox:AddDropdown("FartHubTwoTimeBackstabAimMode", {
+        Text = "Backstab Aim Mode",
+        Values = { "Character", "Camera", "Both", "Off" },
+        Default = AutoStab.Settings.AimMode,
+        Multi = false,
+        Callback = function(value) AutoStab.Settings.AimMode = value end
+    })
+    table.insert(AutoStab.Controls, aimModeDropdown)
 
     local rangeSlider = Groupbox:AddSlider("FartHubTwoTimeBackstabRange", {
         Text = "Backstab Range",
@@ -1002,6 +1017,22 @@ local function setupStaminaChanger()
     for _,p in pairs(profiles) do
         p.UseMax=false;p.UseMin=false;p.UseDrain=false;p.UseGain=false;p.UseSpeed=false
         p.NoDrain=false;p.NoRecoveryDelay=false
+    end
+
+    local function aimForBackstab(localRoot, targetRoot)
+        local mode = AutoStab.Settings.AimMode
+        if mode == "Character" or mode == "Both" then
+            aimForBackstab(localRoot, targetRoot)
+        end
+        if mode == "Camera" or mode == "Both" then
+            local camera = workspace.CurrentCamera
+            if camera then
+                local point = Vector3.new(targetRoot.Position.X, camera.CFrame.Position.Y, targetRoot.Position.Z)
+                if (point - camera.CFrame.Position).Magnitude >= 0.001 then
+                    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, point)
+                end
+            end
+        end
     end
 
     local function actorInfo()
