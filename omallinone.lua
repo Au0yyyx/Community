@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,ObjectiveESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,ObjectiveESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -30,8 +30,8 @@ end
 local function item(m)
  local v=App.Items[m];if v then return v end
  local h=Instance.new("Highlight");h.Name="OM_ESP";h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;h.FillTransparency=.62;h.OutlineTransparency=0;h.Parent=m
- local b=Instance.new("BillboardGui");b.Name="OM_Tag";b.Size=UDim2.fromOffset(180,28);b.StudsOffset=Vector3.new(0,3.4,0);b.AlwaysOnTop=true;b.Parent=m
- local t=Instance.new("TextLabel");t.Size=UDim2.fromScale(1,1);t.BackgroundTransparency=1;t.TextStrokeTransparency=.25;t.TextColor3=Color3.new(1,1,1);t.TextScaled=true;t.Font=Enum.Font.GothamBold;t.Parent=b
+ local b=Instance.new("BillboardGui");b.Name="OM_Tag";b.Size=UDim2.fromOffset(220,78);b.StudsOffset=Vector3.new(0,4.2,0);b.AlwaysOnTop=true;b.Parent=m
+ local t=Instance.new("TextLabel");t.Size=UDim2.fromScale(1,1);t.BackgroundTransparency=1;t.TextStrokeTransparency=.15;t.TextColor3=Color3.new(1,1,1);t.TextScaled=false;t.TextSize=15;t.RichText=true;t.TextWrapped=false;t.Font=Enum.Font.GothamBold;t.Parent=b
  local ring=Instance.new("Part");ring.Name="OM_AttackHitbox";ring.Anchored=true;ring.CanCollide=false;ring.CanQuery=false;ring.CanTouch=false;ring.Shape=Enum.PartType.Cylinder;ring.Material=Enum.Material.Neon;ring.Transparency=.7;ring.Color=Color3.fromRGB(255,80,80);ring.Parent=workspace
  v={H=h,B=b,T=t,R=ring};App.Items[m]=v;return v
 end
@@ -48,7 +48,7 @@ local function target()
  end end;return best
 end
 App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
- local pf=playersFolder();if pf then for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r then local v=item(m);local team=m:GetAttribute("Team");local col=team=="EXE" and Color3.fromRGB(255,65,65) or Color3.fromRGB(65,180,255);v.H.FillColor=col;v.H.OutlineColor=Color3.new(1,1,1);v.H.Enabled=App.Settings.Chams;v.B.Enabled=App.Settings.CharacterESP or App.Settings.NameESP or App.Settings.TextESP or App.Settings.HpESP;local state=tostring(m:GetAttribute("State") or "default"):lower();local life=state:find("down") and "DOWNED" or (m:GetAttribute("LastLife") and "LAST LIFE" or "1ST LIFE");local lines={};if App.Settings.NameESP then lines[#lines+1]=m.Name end;if App.Settings.CharacterESP then lines[#lines+1]=tostring(m:GetAttribute("Character") or "Unknown") end;if App.Settings.TextESP then lines[#lines+1]=life.." • "..state:upper() end;local hp=m:FindFirstChild("Health");if App.Settings.HpESP and hp and hp:IsA("NumberValue") then lines[#lines+1]=string.format("HP: %.0f",hp.Value) end;v.T.Text=table.concat(lines,"\n");v.R.Color=col;v.R.Size=Vector3.new(.15,App.Settings.HitRadius*2,App.Settings.HitRadius*2);v.R.CFrame=CFrame.new(r.Position+r.CFrame.LookVector*App.Settings.HitRadius-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.rad(90));v.R.Transparency=(App.Settings.Hitboxes and attackActive(m)) and .7 or 1 end end end
+ local pf=playersFolder();if pf then for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r then local v=item(m);local team=m:GetAttribute("Team");local col=team=="EXE" and Color3.fromRGB(255,65,65) or Color3.fromRGB(65,180,255);v.H.FillColor=col;v.H.OutlineColor=Color3.new(1,1,1);v.H.Enabled=App.Settings.Chams;v.B.Enabled=App.Settings.CharacterESP or App.Settings.NameESP or App.Settings.TextESP or App.Settings.HpESP;local state=tostring(m:GetAttribute("State") or "default"):lower();local life=state:find("down") and "DOWNED" or (m:GetAttribute("LastLife") and "LAST LIFE" or "1ST LIFE");local lines={};if App.Settings.NameESP then lines[#lines+1]=m.Name end;if App.Settings.CharacterESP then lines[#lines+1]=tostring(m:GetAttribute("Character") or "Unknown") end;if App.Settings.TextESP then lines[#lines+1]=life.." • "..state:upper() end;local hp=m:FindFirstChild("Health");if App.Settings.HpESP and hp and hp:IsA("NumberValue") then local max=tonumber(hp:GetAttribute("MaxHealth") or m:GetAttribute("MaxHealth"));if not max then App.HPMax[m]=math.max(App.HPMax[m] or 0,hp.Value);max=App.HPMax[m] end;max=math.max(max or hp.Value,1);local ratio=math.clamp(hp.Value/max,0,1);local hex=ratio>.6 and "#55FF66" or (ratio>.3 and "#FFAA33" or "#FF4444");lines[#lines+1]=string.format('<font color="%s">HP: %.0f / %.0f</font>',hex,hp.Value,max) end;v.T.Text=table.concat(lines,"\n");v.R.Color=col;v.R.Size=Vector3.new(.15,App.Settings.HitRadius*2,App.Settings.HitRadius*2);v.R.CFrame=CFrame.new(r.Position+r.CFrame.LookVector*App.Settings.HitRadius-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.rad(90));v.R.Transparency=(App.Settings.Hitboxes and attackActive(m)) and .7 or 1 end end end
  if App.Settings.Aim and (not App.Settings.AimHold or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then local m=target();local r=root(m);local c=workspace.CurrentCamera;if r and c then c.CFrame=c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position,r.Position),App.Settings.AimSmooth) end end
  local l=game:GetService("Lighting");if App.Settings.Fullbright then l.Brightness=3;l.GlobalShadows=false end;if App.Settings.NoFog then l.FogEnd=1e6 end
 end)
@@ -60,6 +60,7 @@ local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fu
 local function worldKind(x)
  local n=x.Name:lower()
  if n:find("tripwire",1,true) or n:find("mine",1,true) or n:find("chasetrap",1,true) then return "MINE / TRIPWIRE",Color3.fromRGB(255,70,40) end
+ if n:find("escapering",1,true) or n:find("escape ring",1,true) or n:find("exitring",1,true) or n:find("ringescape",1,true) then return "ESCAPE RING",Color3.fromRGB(80,255,120) end
  if n:find("objective",1,true) or n:find("generator",1,true) or n:find("key",1,true) or n:find("exit",1,true) or n:find("pickup",1,true) then return "OBJECTIVE",Color3.fromRGB(255,220,60) end
 end
 local function worldAdornee(x) if x:IsA("BasePart") then return x end;if x:IsA("Model") then return x.PrimaryPart or x:FindFirstChildWhichIsA("BasePart",true) end end
@@ -71,12 +72,13 @@ local function worldItem(x)
  old={H=h,B=b,Kind=kind};App.WorldItems[x]=old;return old
 end
 local function scanWorld()
- for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP or App.Settings.ObjectiveESP;q.H.Enabled=on;q.B.Enabled=on end end end
+ for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP) or (q.Kind=="OBJECTIVE" and App.Settings.ObjectiveESP);q.H.Enabled=on;q.B.Enabled=on end end end
 end
 e:AddToggle("OMMineESP",{Text="Mine / tripwire ESP",Default=false,Callback=function(x)App.Settings.MineESP=x;scanWorld()end})
+e:AddToggle("OMEscapeESP",{Text="Escape ring ESP",Default=false,Callback=function(x)App.Settings.EscapeESP=x;scanWorld()end})
 e:AddToggle("OMObjectiveESP",{Text="Objective / pickup ESP",Default=false,Callback=function(x)App.Settings.ObjectiveESP=x;scanWorld()end})
 App.Connections[#App.Connections+1]=workspace.DescendantAdded:Connect(function(x)
- task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP or App.Settings.ObjectiveESP;q.H.Enabled=on;q.B.Enabled=on end end end)
+ task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP) or (q.Kind=="OBJECTIVE" and App.Settings.ObjectiveESP);q.H.Enabled=on;q.B.Enabled=on end end end)
 end)
 
 local fov
