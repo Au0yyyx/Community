@@ -69,8 +69,8 @@ local Controller = {
         HighNovaHeight = 5,
         AutoDetonate = false,
         AutoDetonateRadius = 17.25,
-        AimSurvivors = true,
-        AimKillers = false
+        AimSurvivors = false,
+        AimKillers = true
     }
 }
 Environment[ADDON_KEY] = Controller
@@ -133,12 +133,20 @@ local function getTargetFolders(actor)
     local playersFolder = workspace:FindFirstChild("Players")
     if not playersFolder then return {} end
     local folders = {}
+    -- These two target switches are Dusekkar-only. Everyone else keeps the
+    -- ordinary opposing-team target selection.
+    if actor.ActorName ~= "Dusekkar" then
+        local enemyName = actor.Rig and actor.Rig.Parent and actor.Rig.Parent.Name == "Killers"
+            and "Survivors" or "Killers"
+        local enemy = playersFolder:FindFirstChild(enemyName)
+        if enemy then table.insert(folders, enemy) end
+        return folders
+    end
     if Controller.Settings.AimSurvivors then
         local survivors = playersFolder:FindFirstChild("Survivors")
         if survivors then table.insert(folders, survivors) end
     end
-    -- Only Dusekkar has a projectile that can validly use killer targets.
-    if Controller.Settings.AimKillers and actor.ActorName == "Dusekkar" then
+    if Controller.Settings.AimKillers then
         local killers = playersFolder:FindFirstChild("Killers")
         if killers then table.insert(folders, killers) end
     end
@@ -416,12 +424,12 @@ local wallCheckToggle = MainGroup:AddToggle("FartHubStandaloneSilentAimWallCheck
 table.insert(Controller.Controls, wallCheckToggle)
 
 local aimSurvivorsToggle = MainGroup:AddToggle("FartHubSilentAimSurvivors", {
-    Text = "Aim at survivors", Default = Controller.Settings.AimSurvivors,
+    Text = "Dusekkar: aim at survivors", Default = Controller.Settings.AimSurvivors,
     Callback = function(value) Controller.Settings.AimSurvivors = value end
 })
 table.insert(Controller.Controls, aimSurvivorsToggle)
 local aimKillersToggle = MainGroup:AddToggle("FartHubSilentAimKillers", {
-    Text = "Aim at killers (Dusekkar only)", Default = Controller.Settings.AimKillers,
+    Text = "Dusekkar: aim at killers", Default = Controller.Settings.AimKillers,
     Callback = function(value) Controller.Settings.AimKillers = value end
 })
 table.insert(Controller.Controls, aimKillersToggle)
