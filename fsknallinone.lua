@@ -462,7 +462,6 @@ local function loadTwoTimeAutoBackstab()
         AutoStab:Destroy()
     end)
 
-    print("[Forsaken Suite] Integrated Two Time Auto Backstab loaded")
 end
 
 local function setupRoleAwareStaminaTracker()
@@ -932,7 +931,6 @@ function App:Destroy()
     if Env[KEY] == self then Env[KEY] = nil end
 end
 
-print("[Forsaken Stamina Tracker V2] Loaded - role-aware")
     ]====]
     local trackerStatus = Groupbox:AddLabel("Status: Disabled")
 
@@ -1169,5 +1167,4 @@ Library:OnUnload(function()
     end
 end)
 
-print(("[Forsaken Suite] Obsidian GUI loaded %d/%d addons"):format(loadedCount, #loadResults))
 
