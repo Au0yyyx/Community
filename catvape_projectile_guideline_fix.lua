@@ -33,8 +33,11 @@ local function visiblePreviewExists(folder)
     return false
 end
 
-class.enableTargeting = function(self, item, projectileSource, animationConfig, input, options)
+local wrappedEnableTargeting
+wrappedEnableTargeting = function(self, item, projectileSource, animationConfig, input, options)
     local handler = originalEnableTargeting(self, item, projectileSource, animationConfig, input, options)
+    Controller.LastTarget = {Self=self, Handler=handler, Animation=animationConfig}
+    Controller.LastRepair = 0
     task.delay(((options and options.displayBeamDelay) or 0) + 0.06, function()
         if Controller.Destroyed or not self.isTargeting or self.targetingId == 0 then return end
         if not visiblePreviewExists(self.projectileTargetingFolder) then
@@ -44,9 +47,22 @@ class.enableTargeting = function(self, item, projectileSource, animationConfig, 
     end)
     return handler
 end
+class.enableTargeting = wrappedEnableTargeting
+Controller.Wrapper = wrappedEnableTargeting
 
 Controller.Connections[1] = RunService.RenderStepped:Connect(function()
     if Controller.Destroyed then return end
+    -- CatVape and late BedWars initialization may replace this method again.
+    if class.enableTargeting ~= Controller.Wrapper then
+        class.enableTargeting = Controller.Wrapper
+    end
+    local target = Controller.LastTarget
+    if target and target.Self.isTargeting and os.clock()-(Controller.LastRepair or 0)>.2
+        and not visiblePreviewExists(target.Self.projectileTargetingFolder) then
+        Controller.LastRepair=os.clock()
+        pcall(target.Self.enableBeam,target.Self,target.Self.targetingId,target.Handler,nil,
+            target.Animation and target.Animation.beamModifier)
+    end
     for _, beam in ipairs(CollectionService:GetTagged("projectile-preview-beam")) do
         if beam:IsA("Beam") then
             beam.Enabled = true
