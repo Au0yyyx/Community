@@ -286,4 +286,3 @@ end)
 
 function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;for _,q in pairs(self.WorldItems)do pcall(q.H.Destroy,q.H);pcall(q.B.Destroy,q.B)end;if fov then pcall(fov.Remove,fov)end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
 
-287
