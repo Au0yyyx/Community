@@ -1056,11 +1056,8 @@ local function setupStaminaChanger()
 end
 
 local addonPaths = {
-    "FartHub/Addons/fartfix.lua",
     "FartHub/Addons/nosbloodhook.lua",
-    "FartHub/Addons/farthubautogen.lua",
     "FartHub/Addons/farthubsilentaim.lua",
-    "FartHub/Addons/farthubazure.lua",
     "FartHub/Addons/farthubesp.lua"
 }
 
@@ -1076,9 +1073,13 @@ for _, path in ipairs(addonPaths) do
                     .. tostring(os.time())
             )
         elseif fileName == "farthubsilentaim.lua" then
-            -- Always use the suite-owned build; local FartHub copies are stale.
             source = game:HttpGet(
                 "https://raw.githubusercontent.com/Au0yyyx/Community/main/farthubsilentaim.lua?t="
+                    .. tostring(os.time())
+            )
+        elseif fileName == "farthubesp.lua" then
+            source = game:HttpGet(
+                "https://raw.githubusercontent.com/Au0yyyx/Community/main/farthubesp.lua?t="
                     .. tostring(os.time())
             )
         else
