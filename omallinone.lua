@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -53,14 +53,14 @@ App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
  local l=game:GetService("Lighting");if App.Settings.Fullbright then l.Brightness=3;l.GlobalShadows=false end;if App.Settings.NoFog then l.FogEnd=1e6 end
 end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMChams",{Text="Chams",Default=false,Callback=function(v)App.Settings.Chams=v end});e:AddToggle("OMCharacterESP",{Text="Character ESP (Sonic/Amy/etc.)",Default=true,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Player name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="State/life ESP",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
-local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
+local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Generic silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMTailsCannonSilent",{Text="Tails cannon silent aim",Default=false,Callback=function(v)App.Settings.TailsCannonSilentAim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
 
 -- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
 local function worldKind(x)
  local n=x.Name:lower()
  local tagged=false;pcall(function()tagged=x:HasTag("Traps")end)
- if tagged or n:find("tripwire",1,true) or n:find("mine",1,true) or n:find("chasetrap",1,true) then return "MINE / TRIPWIRE",Color3.fromRGB(255,70,40) end
+ if tagged then return "TAILS DOLL TRIPMINE",Color3.fromRGB(255,70,40) end
  if n:find("escapering",1,true) or n:find("escape ring",1,true) or n:find("exitring",1,true) or n:find("ringescape",1,true) then return "ESCAPE RING",Color3.fromRGB(80,255,120) end
 end
 local function worldAdornee(x) if x:IsA("BasePart") then return x end;if x:IsA("Model") then return x.PrimaryPart or x:FindFirstChildWhichIsA("BasePart",true) end end
@@ -72,12 +72,12 @@ local function worldItem(x)
  old={H=h,B=b,Kind=kind};App.WorldItems[x]=old;return old
 end
 local function scanWorld()
- for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end
+ for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=(q.Kind=="TAILS DOLL TRIPMINE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end
 end
 e:AddToggle("OMMineESP",{Text="Mine / tripwire ESP",Default=false,Callback=function(x)App.Settings.MineESP=x;scanWorld()end})
 e:AddToggle("OMEscapeESP",{Text="Escape ring ESP",Default=false,Callback=function(x)App.Settings.EscapeESP=x;scanWorld()end})
 App.Connections[#App.Connections+1]=workspace.DescendantAdded:Connect(function(x)
- task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end)
+ task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=(q.Kind=="TAILS DOLL TRIPMINE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end)
 end)
 local CollectionService=game:GetService("CollectionService")
 App.Connections[#App.Connections+1]=CollectionService:GetInstanceAddedSignal("Traps"):Connect(function(x)
@@ -108,9 +108,9 @@ local oldNamecall
 if type(hookmetamethod)=="function" and type(newcclosure)=="function" then
  oldNamecall=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
   local method=getnamecallmethod();local args={...}
-  if App.Settings.SilentAim and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
+ if (App.Settings.SilentAim or App.Settings.TailsCannonSilentAim) and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
    local remoteName=tostring(self.Name):lower();local attackRemote=remoteName:find("attack",1,true) or remoteName:find("move",1,true) or remoteName:find("projectile",1,true) or remoteName=="onclient"
-   if attackRemote then local m=target();local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*.12;for i,x in ipairs(args)do if typeof(x)=="Vector3" then args[i]=predicted elseif typeof(x)=="CFrame" then args[i]=CFrame.lookAt(x.Position,predicted) end end;return oldNamecall(self,table.unpack(args)) end end
+   if attackRemote then local m=target();local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*.12;local char=LP.Character;local isTails=char and char:GetAttribute("Character")=="Tails";if App.Settings.TailsCannonSilentAim and isTails and root(char) then local rr=root(char);rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z)) end;if App.Settings.SilentAim or (App.Settings.TailsCannonSilentAim and isTails) then for i,x in ipairs(args)do if typeof(x)=="Vector3" then args[i]=predicted elseif typeof(x)=="CFrame" then args[i]=CFrame.lookAt(x.Position,predicted) end end;return oldNamecall(self,table.unpack(args)) end end end
   end
   return oldNamecall(self,...)
  end))
