@@ -283,5 +283,4 @@ if type(Library.OnUnload) == "function" then
     end)
 end
 
-print("[FartHub Addon] Standalone Azure Enstrangle Silent Aim loaded")
 
