@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,ObjectiveESP=false,Aim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,ObjectiveESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -42,17 +42,18 @@ local function target()
  for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r and alive(m) and wanted(m) then
   local p,on=cam:WorldToViewportPoint(r.Position);local s=(Vector2.new(p.X,p.Y)-mouse).Magnitude
   if on and s<=App.Settings.AimFOV and (not score or s<score) then
-   if not App.Settings.Wall or not workspace:Raycast(cam.CFrame.Position,r.Position-cam.CFrame.Position,RaycastParams.new()) then best,score=m,s end
+   local clear=true;if App.Settings.Wall then local rp=RaycastParams.new();rp.FilterType=Enum.RaycastFilterType.Exclude;rp.FilterDescendantsInstances={LP.Character,m};clear=workspace:Raycast(cam.CFrame.Position,r.Position-cam.CFrame.Position,rp)==nil end
+   if clear then best,score=m,s end
   end
  end end;return best
 end
 App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
  local pf=playersFolder();if pf then for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r then local v=item(m);local team=m:GetAttribute("Team");local col=team=="EXE" and Color3.fromRGB(255,65,65) or Color3.fromRGB(65,180,255);v.H.FillColor=col;v.H.OutlineColor=Color3.new(1,1,1);v.H.Enabled=App.Settings.Chams;v.B.Enabled=App.Settings.CharacterESP or App.Settings.NameESP or App.Settings.TextESP or App.Settings.HpESP;local state=tostring(m:GetAttribute("State") or "default"):lower();local life=state:find("down") and "DOWNED" or (m:GetAttribute("LastLife") and "LAST LIFE" or "1ST LIFE");local lines={};if App.Settings.NameESP then lines[#lines+1]=m.Name end;if App.Settings.CharacterESP then lines[#lines+1]=tostring(m:GetAttribute("Character") or "Unknown") end;if App.Settings.TextESP then lines[#lines+1]=life.." • "..state:upper() end;local hp=m:FindFirstChild("Health");if App.Settings.HpESP and hp and hp:IsA("NumberValue") then lines[#lines+1]=string.format("HP: %.0f",hp.Value) end;v.T.Text=table.concat(lines,"\n");v.R.Color=col;v.R.Size=Vector3.new(.15,App.Settings.HitRadius*2,App.Settings.HitRadius*2);v.R.CFrame=CFrame.new(r.Position+r.CFrame.LookVector*App.Settings.HitRadius-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.rad(90));v.R.Transparency=(App.Settings.Hitboxes and attackActive(m)) and .7 or 1 end end end
- if App.Settings.Aim and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then local m=target();local r=root(m);local c=workspace.CurrentCamera;if r and c then c.CFrame=c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position,r.Position),App.Settings.AimSmooth) end end
+ if App.Settings.Aim and (not App.Settings.AimHold or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then local m=target();local r=root(m);local c=workspace.CurrentCamera;if r and c then c.CFrame=c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position,r.Position),App.Settings.AimSmooth) end end
  local l=game:GetService("Lighting");if App.Settings.Fullbright then l.Brightness=3;l.GlobalShadows=false end;if App.Settings.NoFog then l.FogEnd=1e6 end
 end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMChams",{Text="Chams",Default=false,Callback=function(v)App.Settings.Chams=v end});e:AddToggle("OMCharacterESP",{Text="Character ESP (Sonic/Amy/etc.)",Default=true,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Player name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="State/life ESP",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
-local a=Tabs.Aim:AddLeftGroupbox("Aim Assist");a:AddToggle("OMAim",{Text="Aim assist (hold RMB)",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
+local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
 
 -- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
@@ -95,6 +96,41 @@ info:AddToggle("OMSpeedInfo",{Text="Movement speed",Default=false,Callback=funct
 
 local performance=Tabs.Visuals:AddLeftGroupbox("Performance")
 performance:AddToggle("OMLowEffects",{Text="Disable particles and trails",Default=false,Callback=function(x)App.Settings.LowEffects=x;if x then for _,d in ipairs(workspace:GetDescendants())do if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=false end end end end})
+
+-- Generic OM projectile/move silent aim. Only rewrites spatial arguments on
+-- attack-like remotes and leaves ordinary networking untouched.
+local oldNamecall
+if type(hookmetamethod)=="function" and type(newcclosure)=="function" then
+ oldNamecall=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+  local method=getnamecallmethod();local args={...}
+  if App.Settings.SilentAim and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
+   local remoteName=tostring(self.Name):lower();local attackRemote=remoteName:find("attack",1,true) or remoteName:find("move",1,true) or remoteName:find("projectile",1,true) or remoteName=="onclient"
+   if attackRemote then local m=target();local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*.12;for i,x in ipairs(args)do if typeof(x)=="Vector3" then args[i]=predicted elseif typeof(x)=="CFrame" then args[i]=CFrame.lookAt(x.Position,predicted) end end;return oldNamecall(self,table.unpack(args)) end end
+  end
+  return oldNamecall(self,...)
+ end))
+end
+
+local blockBox=Tabs.Aim:AddRightGroupbox("Auto Block")
+blockBox:AddToggle("OMAutoBlock",{Text="Auto block (Knuckles/Eggman)",Default=false,Callback=function(x)App.Settings.AutoBlock=x end})
+blockBox:AddSlider("OMBlockRange",{Text="Block threat range",Default=14,Min=3,Max=40,Rounding=2,Suffix=" studs",Callback=function(x)App.Settings.BlockRange=x end})
+blockBox:AddSlider("OMBlockDelay",{Text="Reaction delay",Default=.06,Min=0,Max=.5,Rounding=3,Suffix="s",Callback=function(x)App.Settings.BlockDelay=x end})
+blockBox:AddSlider("OMBlockHold",{Text="Block hold time",Default=.18,Min=.05,Max=1,Rounding=3,Suffix="s",Callback=function(x)App.Settings.BlockHold=x end})
+blockBox:AddDropdown("OMBlockKey",{Text="Block key",Values={"Q","E","R","F","One","Two","Three"},Default="F",Multi=false,Callback=function(x)App.Settings.BlockKey=x end})
+local VIM=game:GetService("VirtualInputManager");local lastBlock=0
+local function projectileThreat(me)
+ local folder=workspace:FindFirstChild("Projectile");if not folder then return false end
+ for _,x in ipairs(folder:GetDescendants())do if x:IsA("BasePart") then local delta=me.Position-x.Position;if delta.Magnitude<=App.Settings.BlockRange then local velocity=x.AssemblyLinearVelocity;if velocity.Magnitude>1 and velocity.Unit:Dot(delta.Unit)>.45 then return true end end end end
+ return false
+end
+App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
+ if not App.Settings.AutoBlock or os.clock()-lastBlock<.7 then return end
+ local char=LP.Character;local me=root(char);local character=char and tostring(char:GetAttribute("Character"))
+ if not me or (character~="Knuckles" and character~="Eggman") then return end
+ local danger=projectileThreat(me);local pf=playersFolder()
+ if not danger and pf then for _,m in ipairs(pf:GetChildren())do local er=root(m);if m:GetAttribute("Team")=="EXE" and er and (er.Position-me.Position).Magnitude<=App.Settings.BlockRange and attackActive(m) then danger=true;break end end end
+ if danger then lastBlock=os.clock();local key=Enum.KeyCode[App.Settings.BlockKey] or Enum.KeyCode.F;task.delay(App.Settings.BlockDelay,function()if not App.Settings.AutoBlock then return end;VIM:SendKeyEvent(true,key,false,game);task.delay(App.Settings.BlockHold,function()VIM:SendKeyEvent(false,key,false,game)end)end)end
+end)
 
 local lastInfo=0
 App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
