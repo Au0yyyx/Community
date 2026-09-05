@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -101,6 +101,17 @@ info:AddToggle("OMSpeedInfo",{Text="Movement speed",Default=false,Callback=funct
 
 local performance=Tabs.Visuals:AddLeftGroupbox("Performance")
 performance:AddToggle("OMLowEffects",{Text="Disable particles and trails",Default=false,Callback=function(x)App.Settings.LowEffects=x;if x then for _,d in ipairs(workspace:GetDescendants())do if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=false end end end end})
+
+local movement=Tabs.Visuals:AddLeftGroupbox("Movement")
+local speedHumanoid,speedBase
+movement:AddToggle("OMSpeedMultiplierEnabled",{Text="Enable speed multiplier",Default=false,Callback=function(x)App.Settings.SpeedMultiplierEnabled=x;if not x and speedHumanoid and speedHumanoid.Parent and speedBase then speedHumanoid.WalkSpeed=speedBase end;speedHumanoid=nil;speedBase=nil end})
+movement:AddSlider("OMSpeedMultiplier",{Text="Speed multiplier",Default=1,Min=0,Max=5,Rounding=4,Suffix="x",Callback=function(x)App.Settings.SpeedMultiplier=x end})
+App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
+ local h=LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+ if not App.Settings.SpeedMultiplierEnabled or not h then return end
+ if h~=speedHumanoid then speedHumanoid=h;speedBase=h.WalkSpeed end
+ h.WalkSpeed=(speedBase or h.WalkSpeed)*App.Settings.SpeedMultiplier
+end)
 
 -- Generic OM projectile/move silent aim. Only rewrites spatial arguments on
 -- attack-like remotes and leaves ordinary networking untouched.
