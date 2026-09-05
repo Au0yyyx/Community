@@ -13,6 +13,24 @@ local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:Add
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
 local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AbilityAim=false,AbilitySilent=true,AbilityPrediction=.12,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
+local AbilityDefs={
+ Tails={{"Laser Canon",1,7,true},{"Glide",2,10,false}},
+ Knuckles={{"Punch",1,.8,false},{"Counter",2,1.25,false}},
+ Eggman={{"Jetpack Boost",1,1.25,false},{"Energy Shield",2,2,false}},
+ Amy={{"Hammer",1,.85,false},{"Hammer Throw",2,1.5,true}},
+ Cream={{"Heal",1,1,false},{"Dash",2,1.15,false}},
+ MetalSonic={{"Destructive Charge",1,4,false},{"Self Repair",2,7.5,false}},
+ Sonic={{"Drop Dash",1,5,false},{"Peelout",2,6,false}},
+ Blaze={{"Enhanced Sol Boost",1,1.2,false},{"Sol Flame",2,2.5,false},{"Burning Javelin",3,1.5,true}},
+ Silver={{"Suspension",1,3,true},{"Psychokinesis / Rocks",2,2.5,true},{"Time Reversal",3,1,false}},
+ ["2011x"]={{"Attack",0,.65,false},{"Invisibility",1,25,false},{"Charge",2,4.25,false},{"Rage Mode",4,3,false}},
+ Kolossos={{"Attack",0,.7,false},{"Charge",1,5,false},{"Block",2,1.25,false},{"Grab",3,1.5,false},{"Indicator",4,6.5,false}},
+ TailsDoll={{"Attack",0,.65,false},{"S.T.E.P Mines",1,1,false},{"Brighter Day",2,4,true},{"Reach Out",3,2,true}},
+ Fleetway={{"Attack",0,.65,false},{"Chaos Dash",1,4,false},{"Fateful Drain",2,2.25,true},{"Burst",3,1,false},{"Laser of Destruction",4,4,true}}
+}
+App.AbilityConfigs={};App.AbilityKeys={}
+for character,defs in pairs(AbilityDefs)do for _,d in ipairs(defs)do local key=character.."/"..d[1];App.AbilityKeys[#App.AbilityKeys+1]=key;App.AbilityConfigs[key]={Character=character,Name=d[1],Slot=d[2],Duration=d[3],Silent=d[4],Enabled=false}end end
+table.sort(App.AbilityKeys)
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
 local function alive(m)return root(m) and (not m:GetAttribute("State") or m:GetAttribute("State")~="dead")end
@@ -30,7 +48,7 @@ end
 local function item(m)
  local v=App.Items[m];if v then return v end
  local h=Instance.new("Highlight");h.Name="OM_ESP";h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;h.FillTransparency=.62;h.OutlineTransparency=0;h.Parent=m
- local b=Instance.new("BillboardGui");b.Name="OM_Tag";b.Size=UDim2.fromOffset(220,78);b.StudsOffset=Vector3.new(0,4.2,0);b.AlwaysOnTop=true;b.Parent=m
+ local b=Instance.new("BillboardGui");b.Name="OM_Tag";b.Size=UDim2.fromOffset(220,78);b.StudsOffset=Vector3.new(0,4.2,0);b.AlwaysOnTop=true;b.Adornee=root(m);b.Parent=m
  local t=Instance.new("TextLabel");t.Size=UDim2.fromScale(1,1);t.BackgroundTransparency=1;t.TextStrokeTransparency=.15;t.TextColor3=Color3.new(1,1,1);t.TextScaled=false;t.TextSize=15;t.RichText=true;t.TextWrapped=false;t.Font=Enum.Font.GothamBold;t.Parent=b
  local ring=Instance.new("Part");ring.Name="OM_AttackHitbox";ring.Anchored=true;ring.CanCollide=false;ring.CanQuery=false;ring.CanTouch=false;ring.Shape=Enum.PartType.Cylinder;ring.Material=Enum.Material.Neon;ring.Transparency=.7;ring.Color=Color3.fromRGB(255,80,80);ring.Parent=workspace
  v={H=h,B=b,T=t,R=ring};App.Items[m]=v;return v
@@ -48,17 +66,28 @@ local function target(autoEnemy)
  end end;return best
 end
 App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
- local pf=playersFolder();if pf then for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r then local v=item(m);local team=m:GetAttribute("Team");local col=team=="EXE" and Color3.fromRGB(255,65,65) or Color3.fromRGB(65,180,255);v.H.FillColor=col;v.H.OutlineColor=Color3.new(1,1,1);v.H.Enabled=App.Settings.Chams;v.B.Enabled=App.Settings.CharacterESP or App.Settings.NameESP or App.Settings.TextESP or App.Settings.HpESP;local state=tostring(m:GetAttribute("State") or "default"):lower();local life=state:find("down") and "DOWNED" or (m:GetAttribute("LastLife") and "LAST LIFE" or "1ST LIFE");local lines={};if App.Settings.NameESP then lines[#lines+1]=m.Name end;if App.Settings.CharacterESP then lines[#lines+1]=tostring(m:GetAttribute("Character") or "Unknown") end;if App.Settings.TextESP then lines[#lines+1]=life.." • "..state:upper() end;local hp=m:FindFirstChild("Health");if App.Settings.HpESP and hp and hp:IsA("NumberValue") then local max=tonumber(hp:GetAttribute("MaxHealth") or m:GetAttribute("MaxHealth"));if not max then App.HPMax[m]=math.max(App.HPMax[m] or 0,hp.Value);max=App.HPMax[m] end;max=math.max(max or hp.Value,1);local ratio=math.clamp(hp.Value/max,0,1);local hex=ratio>.6 and "#55FF66" or (ratio>.3 and "#FFAA33" or "#FF4444");lines[#lines+1]=string.format('<font color="%s">HP: %.0f / %.0f</font>',hex,hp.Value,max) end;v.T.Text=table.concat(lines,"\n");v.R.Color=col;v.R.Size=Vector3.new(.15,App.Settings.HitRadius*2,App.Settings.HitRadius*2);v.R.CFrame=CFrame.new(r.Position+r.CFrame.LookVector*App.Settings.HitRadius-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.rad(90));v.R.Transparency=(App.Settings.Hitboxes and attackActive(m)) and .7 or 1 end end end
+ local pf=playersFolder();if pf then for m in pairs(App.Items)do if not m.Parent or m.Parent~=pf then clear(m)end end;for _,m in ipairs(pf:GetChildren())do local r=root(m);if m~=LP.Character and r then local v=item(m);v.B.Adornee=r;local team=m:GetAttribute("Team");local col=team=="EXE" and Color3.fromRGB(255,65,65) or Color3.fromRGB(65,180,255);v.H.FillColor=col;v.H.OutlineColor=Color3.new(1,1,1);v.H.Enabled=App.Settings.Chams;v.B.Enabled=App.Settings.CharacterESP or App.Settings.NameESP or App.Settings.TextESP or App.Settings.HpESP;local state=tostring(m:GetAttribute("State") or "default"):lower();local life=state:find("down") and "DOWNED" or (m:GetAttribute("LastLife") and "LAST LIFE" or "1ST LIFE");local lines={};if App.Settings.NameESP then lines[#lines+1]=m.Name end;if App.Settings.CharacterESP then lines[#lines+1]=tostring(m:GetAttribute("Character") or "Unknown") end;if App.Settings.TextESP then lines[#lines+1]=life.." • "..state:upper() end;local hp=m:FindFirstChild("Health");if App.Settings.HpESP and hp and hp:IsA("NumberValue") then local max=tonumber(hp:GetAttribute("MaxHealth") or m:GetAttribute("MaxHealth"));if not max then App.HPMax[m]=math.max(App.HPMax[m] or 0,hp.Value);max=App.HPMax[m] end;max=math.max(max or hp.Value,1);local ratio=math.clamp(hp.Value/max,0,1);local hex=ratio>.6 and "#55FF66" or (ratio>.3 and "#FFAA33" or "#FF4444");lines[#lines+1]=string.format('<font color="%s">HP: %.0f / %.0f</font>',hex,hp.Value,max) end;v.T.Text=table.concat(lines,"\n");v.R.Color=col;v.R.Size=Vector3.new(.15,App.Settings.HitRadius*2,App.Settings.HitRadius*2);v.R.CFrame=CFrame.new(r.Position+r.CFrame.LookVector*App.Settings.HitRadius-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.rad(90));v.R.Transparency=(App.Settings.Hitboxes and attackActive(m)) and .7 or 1 end end end
  if App.Settings.Aim and (not App.Settings.AimHold or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then local m=target();local r=root(m);local c=workspace.CurrentCamera;if r and c then c.CFrame=c.CFrame:Lerp(CFrame.lookAt(c.CFrame.Position,r.Position),App.Settings.AimSmooth) end end
  local l=game:GetService("Lighting");if App.Settings.Fullbright then l.Brightness=3;l.GlobalShadows=false end;if App.Settings.NoFog then l.FogEnd=1e6 end
 end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMChams",{Text="Chams",Default=false,Callback=function(v)App.Settings.Chams=v end});e:AddToggle("OMCharacterESP",{Text="Character ESP (Sonic/Amy/etc.)",Default=true,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Player name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="State/life ESP",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
-local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Generic silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMTailsCannonSilent",{Text="Tails cannon silent aim",Default=false,Callback=function(v)App.Settings.TailsCannonSilentAim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
+local a=Tabs.Aim:AddLeftGroupbox("Aim Assist / Aimbot");a:AddToggle("OMAim",{Text="Camera aimbot",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimHold",{Text="Require RMB",Default=true,Callback=function(v)App.Settings.AimHold=v end});a:AddToggle("OMSilentAim",{Text="Legacy generic silent aim",Default=false,Callback=function(v)App.Settings.SilentAim=v end});a:AddToggle("OMTailsCannonSilent",{Text="Tails Laser Canon silent aim",Default=false,Callback=function(v)App.Settings.TailsCannonSilentAim=v;local c=App.AbilityConfigs["Tails/Laser Canon"];if c then c.Enabled=v;c.Silent=true end end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
 local abilityBox=Tabs.Aim:AddRightGroupbox("All Ability Aim")
-abilityBox:AddToggle("OMAbilityAim",{Text="Aim assist for every ability",Default=false,Callback=function(v)App.Settings.AbilityAim=v end})
-abilityBox:AddToggle("OMAbilitySilent",{Text="Silent aim mouse abilities",Default=true,Callback=function(v)App.Settings.AbilitySilent=v end})
 abilityBox:AddSlider("OMAbilityPrediction",{Text="Ability prediction",Default=.12,Min=0,Max=1,Rounding=4,Suffix="s",Callback=function(v)App.Settings.AbilityPrediction=v end})
-abilityBox:AddLabel("Automatically targets the opposing team. Mouse-position abilities are redirected without moving the camera.",true)
+local selectedAbility=App.AbilityKeys[1]
+local abilityToggle,abilitySilent,abilityDuration
+local function refreshAbilityEditor()
+ local c=App.AbilityConfigs[selectedAbility];if not c then return end
+ if abilityToggle then abilityToggle:SetValue(c.Enabled)end
+ if abilitySilent then abilitySilent:SetValue(c.Silent)end
+ if abilityDuration then abilityDuration:SetValue(c.Duration)end
+end
+abilityBox:AddDropdown("OMAbilitySelect",{Text="Character / ability",Values=App.AbilityKeys,Default=selectedAbility,Multi=false,Callback=function(v)selectedAbility=v;refreshAbilityEditor()end})
+abilityToggle=abilityBox:AddToggle("OMAbilityIndividual",{Text="Enable selected ability",Default=false,Callback=function(v)local c=App.AbilityConfigs[selectedAbility];if c then c.Enabled=v end end})
+abilitySilent=abilityBox:AddToggle("OMAbilityIndividualSilent",{Text="Silent aim (mouse abilities)",Default=false,Callback=function(v)local c=App.AbilityConfigs[selectedAbility];if c then c.Silent=v end end})
+abilityDuration=abilityBox:AddSlider("OMAbilityIndividualDuration",{Text="Aim-assist duration",Default=1,Min=.05,Max=30,Rounding=4,Suffix="s",Callback=function(v)local c=App.AbilityConfigs[selectedAbility];if c then c.Duration=v end end})
+abilityBox:AddLabel("Every move has its own toggle, silent-mode flag, and duration. Defaults match the move's active/aim window.",true)
+task.defer(refreshAbilityEditor)
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
 
 -- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
@@ -120,24 +149,71 @@ end)
 
 -- Ability-aware aim: every ClientMoveset remote targets the opposing team.
 -- Spatial/mouse arguments are rewritten silently; direction-only moves face the target.
+App.ActiveAbility=nil;App.ActiveAbilityUntil=0
+local keybinds={"E","Q","X","Z","F"}
+pcall(function()local d=game.ReplicatedStorage.Remotes.DataUpdate:InvokeServer("FetchData",{"setting"});if d and d.PCKeyBinds then for i=1,5 do keybinds[i]=d.PCKeyBinds[i] or keybinds[i] end end end)
+local function beginAbility(slot)
+ local char=LP.Character;local character=char and tostring(char:GetAttribute("Character"));if not character then return end
+ local defs=AbilityDefs[character];if not defs then return end
+ for _,d in ipairs(defs)do if d[2]==slot then local c=App.AbilityConfigs[character.."/"..d[1]];if c and c.Enabled then App.ActiveAbility=c;App.ActiveAbilityUntil=os.clock()+c.Duration end;return end end
+end
+App.Connections[#App.Connections+1]=UIS.InputBegan:Connect(function(input,processed)
+ if UIS:GetFocusedTextBox() then return end
+ if input.UserInputType==Enum.UserInputType.MouseButton1 then beginAbility(0);return end
+ for i=1,5 do if input.KeyCode==Enum.KeyCode[keybinds[i]] then beginAbility(i);return end end
+end)
+local function activeAbility()
+ if App.ActiveAbility and os.clock()<=App.ActiveAbilityUntil then return App.ActiveAbility end
+ App.ActiveAbility=nil
+ local char=LP.Character;if App.Settings.TailsCannonSilentAim and char and char:GetAttribute("Character")=="Tails" then return App.AbilityConfigs["Tails/Laser Canon"] end
+end
+local function aimPoint()
+ local m=target(true);local tr=root(m);return tr and (tr.Position+tr.AssemblyLinearVelocity*App.Settings.AbilityPrediction),m
+end
+local function rewriteAimArgs(args,predicted)
+ local changed=false
+ local function one(x,key,origin,depth)
+  local ty=typeof(x);key=tostring(key or ""):lower()
+  if ty=="Vector3" then
+   if key:find("origin",1,true) then return x end
+   changed=true
+   if key:find("direction",1,true) or key:find("look",1,true) or key:find("velocity",1,true) then local d=predicted-(origin or workspace.CurrentCamera.CFrame.Position);return d.Magnitude>0 and d.Unit or x end
+   return predicted
+  elseif ty=="CFrame" then changed=true;return CFrame.lookAt(x.Position,predicted)
+  elseif ty=="Ray" then changed=true;local d=predicted-x.Origin;return Ray.new(x.Origin,d.Magnitude>0 and d.Unit*x.Direction.Magnitude or x.Direction)
+  elseif type(x)=="table" and depth<4 then
+   local o={};local org=typeof(x.Origin)=="Vector3" and x.Origin or origin
+   for k,v in pairs(x)do local lk=tostring(k):lower();if lk=="etc" or lk:find("target",1,true) or lk:find("mouse",1,true) or lk:find("position",1,true) or lk:find("direction",1,true) or lk:find("look",1,true) or lk:find("hit",1,true) or lk:find("aim",1,true) then o[k]=one(v,lk,org,depth+1)else o[k]=v end end
+   return o
+  end
+  return x
+ end
+ for i,x in ipairs(args)do args[i]=one(x,"",nil,0)end
+ return changed
+end
 local oldNamecall
 if type(hookmetamethod)=="function" and type(newcclosure)=="function" then
  oldNamecall=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
   local method=getnamecallmethod();local args={...}
- if (App.Settings.AbilityAim or App.Settings.SilentAim or App.Settings.TailsCannonSilentAim) and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
+ local active=activeAbility()
+ if (active or App.Settings.SilentAim) and not (type(checkcaller)=="function" and checkcaller()) and (method=="FireServer" or method=="InvokeServer") then
    local remoteName=tostring(self.Name):lower();local full="";pcall(function()full=self:GetFullName():lower()end);local caller="";if type(getcallingscript)=="function" then pcall(function()local s=getcallingscript();caller=s and s:GetFullName():lower() or "" end)end
-   local abilityRemote=remoteName=="onclient" or full:find("clientmoveset",1,true) or caller:find("clientmoveset",1,true)
+   local abilityRemote=remoteName=="onclient" or remoteName=="mouse" or remoteName=="mouse2" or full:find("clientmoveset",1,true) or caller:find("clientmoveset",1,true)
    local attackRemote=abilityRemote or remoteName:find("attack",1,true) or remoteName:find("move",1,true) or remoteName:find("projectile",1,true)
-   if attackRemote then local m=target(App.Settings.AbilityAim);local tr=root(m);if tr then local predicted=tr.Position+tr.AssemblyLinearVelocity*App.Settings.AbilityPrediction;local char=LP.Character;local rr=root(char);local isTails=char and char:GetAttribute("Character")=="Tails";local changed=false
-    local function rewrite(x,depth) local ty=typeof(x);if ty=="Vector3" then changed=true;return predicted elseif ty=="CFrame" then changed=true;return CFrame.lookAt(x.Position,predicted) elseif ty=="Ray" then changed=true;local d=predicted-x.Origin;return Ray.new(x.Origin,d.Magnitude>0 and d.Unit*x.Direction.Magnitude or x.Direction) elseif type(x)=="table" and depth<3 then local o={};for k,v in pairs(x)do local key=tostring(k):lower();if key:find("target",1,true) or key:find("mouse",1,true) or key:find("position",1,true) or key:find("direction",1,true) or key:find("look",1,true) or key:find("hit",1,true) or key:find("aim",1,true) then o[k]=rewrite(v,depth+1) else o[k]=v end end;return o end;return x end
-    if App.Settings.AbilityAim and App.Settings.AbilitySilent or App.Settings.SilentAim or (App.Settings.TailsCannonSilentAim and isTails) then for i,x in ipairs(args)do args[i]=rewrite(x,0) end end
-    if rr and ((App.Settings.AbilityAim and not changed) or (App.Settings.TailsCannonSilentAim and isTails)) then rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z)) end
-    if changed or App.Settings.AbilityAim or (App.Settings.TailsCannonSilentAim and isTails) then return oldNamecall(self,table.unpack(args)) end
+   if attackRemote then local predicted=aimPoint();if predicted then local rr=root(LP.Character);local changed=false
+    if App.Settings.SilentAim or (active and active.Silent) then changed=rewriteAimArgs(args,predicted) end
+    if rr and active and not active.Silent then rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z)) end
+    if changed or active then return oldNamecall(self,table.unpack(args)) end
    end end
   end
   return oldNamecall(self,...)
  end))
 end
+App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
+ local active=activeAbility();if not active or active.Silent then return end
+ local predicted=aimPoint();local rr=root(LP.Character);local cam=workspace.CurrentCamera
+ if predicted and rr then rr.CFrame=CFrame.lookAt(rr.Position,Vector3.new(predicted.X,rr.Position.Y,predicted.Z));if cam then cam.CFrame=cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position,predicted),App.Settings.AimSmooth)end end
+end)
 
 local blockBox=Tabs.Aim:AddRightGroupbox("Auto Block")
 blockBox:AddToggle("OMAutoBlock",{Text="Auto block (Knuckles/Eggman)",Default=false,Callback=function(x)App.Settings.AutoBlock=x end})
@@ -174,6 +250,13 @@ end
 local function has2011()local pf=playersFolder();if not pf then return false end;for _,m in ipairs(pf:GetChildren())do if tostring(m:GetAttribute("Character")):lower()=="2011x" then return true end end;return false end
 local function visibleGui(x)local p=x;while p and p~=LP.PlayerGui do if p:IsA("GuiObject") and not p.Visible then return false end;if p:IsA("LayerCollector") and not p.Enabled then return false end;p=p.Parent end;return p==LP.PlayerGui end
 local function qteScope(x)local p=x;while p and p~=LP.PlayerGui do local n=p.Name:lower();if n:find("2011",1,true) or n:find("qte",1,true) or n:find("quicktime",1,true) or n:find("struggle",1,true) or n:find("escape",1,true) or n:find("keyprompt",1,true) then return true end;p=p.Parent end;return false end
+local function qteReady(x)
+ local scope=x:FindFirstAncestor("TemporaryUI") or x;local p=x
+ while not x:FindFirstAncestor("TemporaryUI") and p and p~=LP.PlayerGui do local n=p.Name:lower();if n:find("2011",1,true) or n:find("qte",1,true) or n:find("quicktime",1,true) or n:find("struggle",1,true) or n:find("escape",1,true) then scope=p end;p=p.Parent end
+ local list={scope};for _,d in ipairs(scope:GetDescendants())do if #list>80 then break end;list[#list+1]=d end
+ for _,g in ipairs(list)do if g:IsA("GuiObject") and visibleGui(g) then local colors={g.BackgroundColor3};if g:IsA("ImageLabel") or g:IsA("ImageButton") then colors[#colors+1]=g.ImageColor3 end;if g:IsA("TextLabel") or g:IsA("TextButton") or g:IsA("TextBox") then colors[#colors+1]=g.TextColor3 end;for _,c in ipairs(colors)do if c.R>.65 and c.R>c.G*1.5 and c.R>c.B*1.35 then return true end end end end
+ return false
+end
 local function inspectQTE(x)
  if not visibleGui(x) then return end
  for n,v in pairs(x:GetAttributes())do local k=n:lower();if k:find("key",1,true) or k:find("input",1,true) or k:find("button",1,true) then local code=qteKey(v);if code then return code end end end
@@ -182,7 +265,7 @@ local function inspectQTE(x)
  return token and qteKey(token)
 end
 local function considerQTE(x)
- if not App.Settings.Auto2011QTE or not has2011() or not (qteScope(x) or x:FindFirstAncestor("TemporaryUI")) then return end
+ if not App.Settings.Auto2011QTE or not has2011() or not (qteScope(x) or x:FindFirstAncestor("TemporaryUI")) or not qteReady(x) then return end
  local code=inspectQTE(x);if not code then return end;local stamp=code.Name.."|"..tostring((x:IsA("TextLabel") or x:IsA("TextButton") or x:IsA("TextBox")) and x.Text or x.Name);if qteSeen[x]==stamp then return end;qteSeen[x]=stamp;qteToken+=1;local token=qteToken
  task.delay(App.Settings.QTEDelay,function()if not App.Settings.Auto2011QTE or token~=qteToken or not x.Parent or not visibleGui(x) then return end;VIM:SendKeyEvent(true,code,false,game);if type(keypress)=="function" then pcall(keypress,code.Value)end;task.wait(.04);VIM:SendKeyEvent(false,code,false,game);if type(keyrelease)=="function" then pcall(keyrelease,code.Value)end end)
 end
@@ -203,3 +286,4 @@ end)
 
 function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;for _,q in pairs(self.WorldItems)do pcall(q.H.Destroy,q.H);pcall(q.B.Destroy,q.B)end;if fov then pcall(fov.Remove,fov)end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
 
+287
