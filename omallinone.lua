@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,ObjectiveESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -59,9 +59,9 @@ local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fu
 -- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
 local function worldKind(x)
  local n=x.Name:lower()
- if n:find("tripwire",1,true) or n:find("mine",1,true) or n:find("chasetrap",1,true) then return "MINE / TRIPWIRE",Color3.fromRGB(255,70,40) end
+ local tagged=false;pcall(function()tagged=x:HasTag("Traps")end)
+ if tagged or n:find("tripwire",1,true) or n:find("mine",1,true) or n:find("chasetrap",1,true) then return "MINE / TRIPWIRE",Color3.fromRGB(255,70,40) end
  if n:find("escapering",1,true) or n:find("escape ring",1,true) or n:find("exitring",1,true) or n:find("ringescape",1,true) then return "ESCAPE RING",Color3.fromRGB(80,255,120) end
- if n:find("objective",1,true) or n:find("generator",1,true) or n:find("key",1,true) or n:find("exit",1,true) or n:find("pickup",1,true) then return "OBJECTIVE",Color3.fromRGB(255,220,60) end
 end
 local function worldAdornee(x) if x:IsA("BasePart") then return x end;if x:IsA("Model") then return x.PrimaryPart or x:FindFirstChildWhichIsA("BasePart",true) end end
 local function worldItem(x)
@@ -72,13 +72,16 @@ local function worldItem(x)
  old={H=h,B=b,Kind=kind};App.WorldItems[x]=old;return old
 end
 local function scanWorld()
- for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP) or (q.Kind=="OBJECTIVE" and App.Settings.ObjectiveESP);q.H.Enabled=on;q.B.Enabled=on end end end
+ for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end
 end
 e:AddToggle("OMMineESP",{Text="Mine / tripwire ESP",Default=false,Callback=function(x)App.Settings.MineESP=x;scanWorld()end})
 e:AddToggle("OMEscapeESP",{Text="Escape ring ESP",Default=false,Callback=function(x)App.Settings.EscapeESP=x;scanWorld()end})
-e:AddToggle("OMObjectiveESP",{Text="Objective / pickup ESP",Default=false,Callback=function(x)App.Settings.ObjectiveESP=x;scanWorld()end})
 App.Connections[#App.Connections+1]=workspace.DescendantAdded:Connect(function(x)
- task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP) or (q.Kind=="OBJECTIVE" and App.Settings.ObjectiveESP);q.H.Enabled=on;q.B.Enabled=on end end end)
+ task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=(q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP) or (q.Kind=="ESCAPE RING" and App.Settings.EscapeESP);q.H.Enabled=on;q.B.Enabled=on end end end)
+end)
+local CollectionService=game:GetService("CollectionService")
+App.Connections[#App.Connections+1]=CollectionService:GetInstanceAddedSignal("Traps"):Connect(function(x)
+ task.defer(function()local q=worldItem(x);if q then q.H.Enabled=App.Settings.MineESP;q.B.Enabled=App.Settings.MineESP end end)
 end)
 
 local fov
