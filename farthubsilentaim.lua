@@ -409,5 +409,4 @@ if type(Library.OnUnload) == "function" then
     end)
 end
 
-print("[FartHub Addon] Standalone Silent Aim and Noli High Nova loaded")
 
