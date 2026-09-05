@@ -1057,7 +1057,10 @@ end
 
 local addonPaths = {
     "FartHub/Addons/nosbloodhook.lua",
+    "FartHub/Addons/fartfix.lua",
+    "FartHub/Addons/farthubautogen.lua",
     "FartHub/Addons/farthubsilentaim.lua",
+    "FartHub/Addons/farthubazure.lua",
     "FartHub/Addons/farthubesp.lua"
 }
 
@@ -1067,24 +1070,9 @@ for _, path in ipairs(addonPaths) do
     local fileName = path:match("[^\\/]+$") or path
     local ok, loadError = pcall(function()
         local source
-        if fileName == "nosbloodhook.lua" then
-            source = game:HttpGet(
-                "https://raw.githubusercontent.com/Au0yyyx/Community/main/nosbloodhook.lua?t="
-                    .. tostring(os.time())
-            )
-        elseif fileName == "farthubsilentaim.lua" then
-            source = game:HttpGet(
-                "https://raw.githubusercontent.com/Au0yyyx/Community/main/farthubsilentaim.lua?t="
-                    .. tostring(os.time())
-            )
-        elseif fileName == "farthubesp.lua" then
-            source = game:HttpGet(
-                "https://raw.githubusercontent.com/Au0yyyx/Community/main/farthubesp.lua?t="
-                    .. tostring(os.time())
-            )
-        else
-            source = readfile(path)
-        end
+        source = game:HttpGet(
+            "https://raw.githubusercontent.com/Au0yyyx/Community/main/" .. fileName .. "?t=" .. tostring(os.time())
+        )
         assert(type(source) == "string", "addon source was unavailable")
         source = source:gsub(
             "local Library = findFartHubLibrary%(30%)",
