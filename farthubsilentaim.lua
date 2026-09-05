@@ -238,7 +238,15 @@ replacementUtilGetMouse = function(self, player, ...)
     end
     return originalUtilGetMouse(self, player, ...)
 end
-Util.GetPlayerMousePosition = replacementUtilGetMouse
+local utilWritable = pcall(function()
+    Util.GetPlayerMousePosition = replacementUtilGetMouse
+end)
+local utilHooked = false
+if not utilWritable then
+    assert(type(hookfunction) == "function", "Util table is readonly and hookfunction is unavailable")
+    originalUtilGetMouse = hookfunction(Util.GetPlayerMousePosition, replacementUtilGetMouse)
+    utilHooked = true
+end
 Controller.OriginalUtilGetMouse = originalUtilGetMouse
 Controller.ReplacementUtilGetMouse = replacementUtilGetMouse
 
@@ -247,8 +255,8 @@ table.insert(Controller.Connections, RunService.Heartbeat:Connect(function()
     if MouseProvider.GetMousePos ~= replacementGetMousePos then
         MouseProvider.GetMousePos = replacementGetMousePos
     end
-    if Util.GetPlayerMousePosition ~= replacementUtilGetMouse then
-        Util.GetPlayerMousePosition = replacementUtilGetMouse
+    if utilWritable and Util.GetPlayerMousePosition ~= replacementUtilGetMouse then
+        pcall(function() Util.GetPlayerMousePosition = replacementUtilGetMouse end)
     end
 end))
 
@@ -399,8 +407,10 @@ function Controller:Destroy()
     if MouseProvider.GetMousePos == self.ReplacementGetMousePos then
         MouseProvider.GetMousePos = self.OriginalGetMousePos
     end
-    if Util.GetPlayerMousePosition == self.ReplacementUtilGetMouse then
-        Util.GetPlayerMousePosition = self.OriginalUtilGetMouse
+    if utilHooked and type(hookfunction) == "function" then
+        pcall(hookfunction, Util.GetPlayerMousePosition, self.OriginalUtilGetMouse)
+    elseif Util.GetPlayerMousePosition == self.ReplacementUtilGetMouse then
+        pcall(function() Util.GetPlayerMousePosition = self.OriginalUtilGetMouse end)
     end
 
     for _, connection in ipairs(self.Connections) do
