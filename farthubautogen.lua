@@ -236,5 +236,4 @@ if type(Library.OnUnload) == "function" then
     end)
 end
 
-print("[FartHub Addon] AutoGen loaded")
 
