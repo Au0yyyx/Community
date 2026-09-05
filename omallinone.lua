@@ -178,12 +178,12 @@ local function inspectQTE(x)
  if not visibleGui(x) then return end
  for n,v in pairs(x:GetAttributes())do local k=n:lower();if k:find("key",1,true) or k:find("input",1,true) or k:find("button",1,true) then local code=qteKey(v);if code then return code end end end
  local value=x:IsA("ValueBase") and x.Value or ((x:IsA("TextLabel") or x:IsA("TextButton") or x:IsA("TextBox")) and x.Text or x.Name)
- local raw=tostring(value or "");local token=raw:match("[%[%(]?([WASDQERFZXCV])[%]%)]?") or raw:match("[Pp][Rr][Ee][Ss][Ss]%s+([%w]+)") or raw:match("[Tt][Aa][Pp]%s+([%w]+)") or raw:match("^%s*([%w]+)%s*$")
+ local raw=tostring(value or "");local token=raw:match("^[Pp][Rr][Ee][Ss][Ss]%s+[%[%(]?([%w]+)") or raw:match("^[Tt][Aa][Pp]%s+[%[%(]?([%w]+)") or raw:match("^%s*[%[%(]?([WASDQERFZXCV])[%]%)]?%s*$") or raw:match("^%s*([%w]+)%s*$")
  return token and qteKey(token)
 end
 local function considerQTE(x)
- if not App.Settings.Auto2011QTE or qteSeen[x] or not has2011() or not (qteScope(x) or x:FindFirstAncestor("TemporaryUI")) then return end
- local code=inspectQTE(x);if not code then return end;qteSeen[x]=true;qteToken+=1;local token=qteToken
+ if not App.Settings.Auto2011QTE or not has2011() or not (qteScope(x) or x:FindFirstAncestor("TemporaryUI")) then return end
+ local code=inspectQTE(x);if not code then return end;local stamp=code.Name.."|"..tostring((x:IsA("TextLabel") or x:IsA("TextButton") or x:IsA("TextBox")) and x.Text or x.Name);if qteSeen[x]==stamp then return end;qteSeen[x]=stamp;qteToken+=1;local token=qteToken
  task.delay(App.Settings.QTEDelay,function()if not App.Settings.Auto2011QTE or token~=qteToken or not x.Parent or not visibleGui(x) then return end;VIM:SendKeyEvent(true,code,false,game);if type(keypress)=="function" then pcall(keypress,code.Value)end;task.wait(.04);VIM:SendKeyEvent(false,code,false,game);if type(keyrelease)=="function" then pcall(keyrelease,code.Value)end end)
 end
 App.Connections[#App.Connections+1]=LP.PlayerGui.DescendantAdded:Connect(function(x)task.defer(considerQTE,x)end)
