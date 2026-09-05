@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},Settings={CharacterESP=false,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,Aim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,Fullbright=false,NoFog=false}}
+local App={Connections={},Items={},WorldItems={},Settings={CharacterESP=false,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,ObjectiveESP=false,Aim=false,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -54,5 +54,59 @@ end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMCharacterESP",{Text="Character ESP",Default=false,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="Text ESP (state/lives)",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
 local a=Tabs.Aim:AddLeftGroupbox("Aim Assist");a:AddToggle("OMAim",{Text="Aim assist (hold RMB)",Default=false,Callback=function(v)App.Settings.Aim=v end});a:AddToggle("OMAimSurv",{Text="Target survivors",Default=false,Callback=function(v)App.Settings.AimSurvivors=v end});a:AddToggle("OMAimEXE",{Text="Target EXE",Default=true,Callback=function(v)App.Settings.AimEXE=v end});a:AddSlider("OMFOV",{Text="Aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddSlider("OMSmooth",{Text="Aim smoothing",Default=.18,Min=.01,Max=1,Rounding=2,Callback=function(v)App.Settings.AimSmooth=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end})
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
-function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
+
+-- World ESP: Tails Doll mines/tripwires and common objectives/pickups.
+local function worldKind(x)
+ local n=x.Name:lower()
+ if n:find("tripwire",1,true) or n:find("mine",1,true) or n:find("chasetrap",1,true) then return "MINE / TRIPWIRE",Color3.fromRGB(255,70,40) end
+ if n:find("objective",1,true) or n:find("generator",1,true) or n:find("key",1,true) or n:find("exit",1,true) or n:find("pickup",1,true) then return "OBJECTIVE",Color3.fromRGB(255,220,60) end
+end
+local function worldAdornee(x) if x:IsA("BasePart") then return x end;if x:IsA("Model") then return x.PrimaryPart or x:FindFirstChildWhichIsA("BasePart",true) end end
+local function worldItem(x)
+ local old=App.WorldItems[x];if old then return old end;local part=worldAdornee(x);local kind,col=worldKind(x);if not part or not kind then return end
+ local h=Instance.new("Highlight");h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;h.FillColor=col;h.OutlineColor=Color3.new(1,1,1);h.FillTransparency=.45;h.Adornee=x;h.Parent=x
+ local b=Instance.new("BillboardGui");b.Size=UDim2.fromOffset(170,24);b.StudsOffset=Vector3.new(0,2,0);b.AlwaysOnTop=true;b.Adornee=part;b.Parent=part
+ local t=Instance.new("TextLabel");t.Size=UDim2.fromScale(1,1);t.BackgroundTransparency=1;t.Text=kind;t.TextColor3=col;t.TextStrokeTransparency=0;t.TextScaled=true;t.Font=Enum.Font.GothamBold;t.Parent=b
+ old={H=h,B=b,Kind=kind};App.WorldItems[x]=old;return old
+end
+local function scanWorld()
+ for _,x in ipairs(workspace:GetDescendants())do local kind=worldKind(x);if kind and (x:IsA("Model") or x:IsA("BasePart")) then local q=worldItem(x);if q then local on=q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP or App.Settings.ObjectiveESP;q.H.Enabled=on;q.B.Enabled=on end end end
+end
+e:AddToggle("OMMineESP",{Text="Mine / tripwire ESP",Default=false,Callback=function(x)App.Settings.MineESP=x;scanWorld()end})
+e:AddToggle("OMObjectiveESP",{Text="Objective / pickup ESP",Default=false,Callback=function(x)App.Settings.ObjectiveESP=x;scanWorld()end})
+App.Connections[#App.Connections+1]=workspace.DescendantAdded:Connect(function(x)
+ task.defer(function() local kind=worldKind(x);if kind then local q=worldItem(x);if q then local on=q.Kind=="MINE / TRIPWIRE" and App.Settings.MineESP or App.Settings.ObjectiveESP;q.H.Enabled=on;q.B.Enabled=on end end end)
+end)
+
+local fov
+if Drawing and Drawing.new then fov=Drawing.new("Circle");fov.Filled=false;fov.Thickness=1;fov.NumSides=64;fov.Color=Color3.fromRGB(255,255,255);fov.Transparency=.8 end
+a:AddToggle("OMFOVCircle",{Text="Show FOV circle",Default=true,Callback=function(x)App.Settings.FOVCircle=x end})
+
+local info=Tabs.Visuals:AddRightGroupbox("Live Information")
+local roundLabel=info:AddLabel("Round: disabled",true)
+local threatLabel=info:AddLabel("Threat: disabled",true)
+local cooldownLabel=info:AddLabel("Cooldowns: disabled",true)
+local speedLabel=info:AddLabel("Speed: disabled",true)
+info:AddToggle("OMRoundInfo",{Text="Round information",Default=false,Callback=function(x)App.Settings.RoundInfo=x end})
+info:AddToggle("OMThreat",{Text="Threat alerts",Default=false,Callback=function(x)App.Settings.ThreatAlerts=x end})
+info:AddSlider("OMThreatRange",{Text="Threat range",Default=45,Min=5,Max=150,Rounding=1,Suffix=" studs",Callback=function(x)App.Settings.ThreatRange=x end})
+info:AddToggle("OMCooldownInfo",{Text="Ability / cooldown values",Default=false,Callback=function(x)App.Settings.CooldownInfo=x end})
+info:AddToggle("OMSpeedInfo",{Text="Movement speed",Default=false,Callback=function(x)App.Settings.SpeedInfo=x end})
+
+local performance=Tabs.Visuals:AddLeftGroupbox("Performance")
+performance:AddToggle("OMLowEffects",{Text="Disable particles and trails",Default=false,Callback=function(x)App.Settings.LowEffects=x;if x then for _,d in ipairs(workspace:GetDescendants())do if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=false end end end end})
+
+local lastInfo=0
+App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
+ if os.clock()-lastInfo<.15 then return end;lastInfo=os.clock()
+ if fov then fov.Visible=App.Settings.Aim and App.Settings.FOVCircle;fov.Position=UIS:GetMouseLocation();fov.Radius=App.Settings.AimFOV end
+ local gp=workspace:FindFirstChild("GameProperties")
+ if App.Settings.RoundInfo and gp then local state=gp:FindFirstChild("State");local time=gp:FindFirstChild("Time");local exe=gp:FindFirstChild("EXE");roundLabel:SetText(string.format("%s | %ss | EXE: %s",state and state.Value or "?",time and time.Value or "?",exe and exe.Value or "?"))else roundLabel:SetText("Round: disabled")end
+ local me=root(LP.Character);local nearest=math.huge;local nearestName="none";local pf=playersFolder();if me and pf then for _,m in ipairs(pf:GetChildren())do if m:GetAttribute("Team")=="EXE" and m~=LP.Character and root(m) then local d=(root(m).Position-me.Position).Magnitude;if d<nearest then nearest=d;nearestName=m.Name end end end end
+ if App.Settings.ThreatAlerts then threatLabel:SetText(nearest<=App.Settings.ThreatRange and string.format("THREAT: %s • %.1f studs",nearestName,nearest) or "Threat: clear")else threatLabel:SetText("Threat: disabled")end
+ if App.Settings.SpeedInfo and me then local vel=me.AssemblyLinearVelocity;speedLabel:SetText(string.format("Speed: %.2f studs/s",Vector3.new(vel.X,0,vel.Z).Magnitude))else speedLabel:SetText("Speed: disabled")end
+ if App.Settings.CooldownInfo and LP.Character then local values={};for _,x in ipairs(LP.Character:GetChildren())do if x:IsA("NumberValue") and (x.Name:lower():find("cool",1,true) or x.Name:lower():find("charge",1,true) or x.Name:lower():find("mine",1,true) or x.Name:lower():find("energy",1,true)) then values[#values+1]=x.Name..": "..string.format("%.1f",x.Value) end end;cooldownLabel:SetText(#values>0 and table.concat(values," | ") or "Cooldowns: no exposed values")else cooldownLabel:SetText("Cooldowns: disabled")end
+end)
+
+function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;for _,q in pairs(self.WorldItems)do pcall(q.H.Destroy,q.H);pcall(q.B.Destroy,q.B)end;if fov then pcall(fov.Remove,fov)end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
 
