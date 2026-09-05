@@ -991,85 +991,80 @@ end
 end
 
 local function setupStaminaChanger()
-    local Groupbox = Tabs.Automation:AddRightGroupbox("Local Stamina Changer")
     local Sprinting = require(game:GetService("ReplicatedStorage").Systems.Character.Game.Sprinting)
     local RunService = game:GetService("RunService")
-    local settings = {
-        Enabled = false,
-        MaxStamina = 100,
-        MinStamina = 0,
-        DrainMultiplier = 1,
-        RegenMultiplier = 1,
-        SprintSpeed = 26,
-        NoDrain = false,
-        InstantRecovery = false,
-    }
+    local Actors = require(game:GetService("ReplicatedStorage").Modules.Gameplay.Actors)
     local original, connection
+    local profiles = {
+        Survivor = {Max=100,Min=0,Drain=10,Gain=20,SpeedMult=1},
+        Killer = {Max=100,Min=0,Drain=10,Gain=20,SpeedMult=1}
+    }
+    for _,p in pairs(profiles) do
+        p.UseMax=false;p.UseMin=false;p.UseDrain=false;p.UseGain=false;p.UseSpeed=false
+        p.NoDrain=false;p.NoRecoveryDelay=false
+    end
 
+    local function actorInfo()
+        local actor=Actors.CurrentActors[game:GetService("Players").LocalPlayer]
+        if not actor then return nil,nil end
+        local role=(actor.Rig and actor.Rig.Parent and actor.Rig.Parent.Name=="Killers") and "Killer" or "Survivor"
+        return actor,role
+    end
     local function capture()
-        original = {
-            MaxStamina = Sprinting.MaxStamina,
-            MinStamina = Sprinting.MinStamina,
-            StaminaLoss = Sprinting.StaminaLoss,
-            StaminaGain = Sprinting.StaminaGain,
-            SprintSpeed = Sprinting.SprintSpeed,
-            StaminaLossDisabled = Sprinting.StaminaLossDisabled,
-        }
+        original={MaxStamina=Sprinting.MaxStamina,MinStamina=Sprinting.MinStamina,StaminaLoss=Sprinting.StaminaLoss,
+            StaminaGain=Sprinting.StaminaGain,SprintSpeed=Sprinting.SprintSpeed,StaminaLossDisabled=Sprinting.StaminaLossDisabled}
     end
     local function restore()
         if not original then return end
-        for key, value in pairs(original) do Sprinting[key] = value end
-        if Sprinting.Stamina then
-            Sprinting.Stamina = math.clamp(Sprinting.Stamina, Sprinting.MinStamina, Sprinting.StaminaCap or Sprinting.MaxStamina)
-            if Sprinting.__staminaChangedEvent then Sprinting.__staminaChangedEvent:Fire(Sprinting.Stamina) end
-        end
-        pcall(Sprinting.Resync, Sprinting)
+        for k,v in pairs(original) do Sprinting[k]=v end
+        pcall(Sprinting.Resync,Sprinting)
+        original=nil
+    end
+    local function anyEnabled(p)
+        return p.UseMax or p.UseMin or p.UseDrain or p.UseGain or p.UseSpeed or p.NoDrain or p.NoRecoveryDelay
     end
     local function apply()
-        if not settings.Enabled or not Sprinting.DefaultsSet then return end
+        local actor,role=actorInfo();local p=role and profiles[role]
+        if not actor or not p or not anyEnabled(p) or not Sprinting.DefaultsSet then restore();return end
         if not original then capture() end
-        Sprinting.MaxStamina = settings.MaxStamina
-        Sprinting.MinStamina = math.min(settings.MinStamina, settings.MaxStamina)
-        Sprinting.StaminaLoss = (original.StaminaLoss or 10) * settings.DrainMultiplier
-        Sprinting.StaminaGain = (original.StaminaGain or 20) * settings.RegenMultiplier
-        Sprinting.SprintSpeed = settings.SprintSpeed
-        Sprinting.StaminaLossDisabled = settings.NoDrain
-        if settings.InstantRecovery and not Sprinting.IsSprinting then
-            Sprinting.timeUntilStaminaRecovers = 0
-        end
+        local cfg=actor.Config or {}
+        Sprinting.MaxStamina=p.UseMax and p.Max or original.MaxStamina
+        Sprinting.MinStamina=p.UseMin and math.min(p.Min,p.UseMax and p.Max or Sprinting.MaxStamina) or original.MinStamina
+        Sprinting.StaminaLoss=p.UseDrain and p.Drain or original.StaminaLoss
+        Sprinting.StaminaGain=p.UseGain and p.Gain or original.StaminaGain
+        local baseSpeed=cfg.SprintSpeed or original.SprintSpeed or Sprinting.SprintSpeed
+        Sprinting.SprintSpeed=p.UseSpeed and baseSpeed*p.SpeedMult or original.SprintSpeed
+        Sprinting.StaminaLossDisabled=p.NoDrain or original.StaminaLossDisabled
+        if p.NoRecoveryDelay and not Sprinting.IsSprinting then Sprinting.timeUntilStaminaRecovers=0 end
         if Sprinting.Stamina then
-            Sprinting.Stamina = math.clamp(Sprinting.Stamina, Sprinting.MinStamina, Sprinting.StaminaCap or Sprinting.MaxStamina)
+            Sprinting.Stamina=math.clamp(Sprinting.Stamina,Sprinting.MinStamina,Sprinting.StaminaCap or Sprinting.MaxStamina)
         end
     end
 
-    Groupbox:AddToggle("ForsakenStaminaChanger", {Text="Enable stamina changer", Default=false, Callback=function(v)
-        if v and not settings.Enabled then capture() end
-        settings.Enabled=v
-        if v then apply() else restore();original=nil end
-    end})
-    Groupbox:AddSlider("ForsakenStaminaMax", {Text="Maximum stamina",Default=100,Min=1,Max=500,Rounding=0,Callback=function(v)settings.MaxStamina=v end})
-    Groupbox:AddSlider("ForsakenStaminaMin", {Text="Minimum stamina",Default=0,Min=0,Max=100,Rounding=0,Callback=function(v)settings.MinStamina=v end})
-    Groupbox:AddSlider("ForsakenStaminaDrain", {Text="Drain multiplier",Default=1,Min=0,Max=3,Rounding=2,Callback=function(v)settings.DrainMultiplier=v end})
-    Groupbox:AddSlider("ForsakenStaminaRegen", {Text="Regen multiplier",Default=1,Min=0,Max=5,Rounding=2,Callback=function(v)settings.RegenMultiplier=v end})
-    Groupbox:AddSlider("ForsakenSprintSpeed", {Text="Sprint speed",Default=26,Min=16,Max=40,Rounding=1,Callback=function(v)settings.SprintSpeed=v end})
-    Groupbox:AddToggle("ForsakenStaminaNoDrain", {Text="Disable stamina drain",Default=false,Callback=function(v)settings.NoDrain=v end})
-    Groupbox:AddToggle("ForsakenStaminaInstantRecovery", {Text="Remove recovery delay",Default=false,Callback=function(v)settings.InstantRecovery=v end})
-    Groupbox:AddLabel("Changes only your local Sprinting controller and restores every original value when disabled.", true)
-
-    connection=RunService.Heartbeat:Connect(function()
-        if settings.Enabled then
-            if Sprinting.DefaultsSet and original and Sprinting.MaxStamina ~= settings.MaxStamina then
-                -- Init or an ability rewrote the controller. Refresh its genuine defaults.
-                capture()
-            end
-            apply()
-        end
-    end)
-    local function cleanup() settings.Enabled=false;restore();if connection then connection:Disconnect()end end
-    if type(Library.OnUnload)=="function"then Library:OnUnload(cleanup)end
-    Environment.__ForsakenStaminaChanger={Settings=settings,Destroy=cleanup,Sprinting=Sprinting}
+    local function build(role,side)
+        local p=profiles[role]
+        local box=Tabs.Automation[side](Tabs.Automation,role.." Stamina Changer")
+        local function toggle(id,text,key) box:AddToggle(id,{Text=text,Default=false,Callback=function(v)p[key]=v end}) end
+        toggle("FSK"..role.."UseMax","Override maximum stamina","UseMax")
+        box:AddSlider("FSK"..role.."Max",{Text="Maximum stamina",Default=p.Max,Min=0,Max=500,Rounding=4,Callback=function(v)p.Max=v end})
+        toggle("FSK"..role.."UseMin","Override minimum stamina","UseMin")
+        box:AddSlider("FSK"..role.."Min",{Text="Minimum stamina",Default=p.Min,Min=0,Max=100,Rounding=4,Callback=function(v)p.Min=v end})
+        toggle("FSK"..role.."UseDrain","Override drain per second","UseDrain")
+        box:AddSlider("FSK"..role.."Drain",{Text="Stamina drain / second",Default=p.Drain,Min=0,Max=100,Rounding=4,Callback=function(v)p.Drain=v end})
+        toggle("FSK"..role.."UseGain","Override gain per second","UseGain")
+        box:AddSlider("FSK"..role.."Gain",{Text="Stamina gain / second",Default=p.Gain,Min=0,Max=100,Rounding=4,Callback=function(v)p.Gain=v end})
+        toggle("FSK"..role.."UseSpeed","Enable sprint speed multiplier","UseSpeed")
+        box:AddSlider("FSK"..role.."SpeedMult",{Text="Sprint speed multiplier",Default=1,Min=0,Max=5,Rounding=4,Callback=function(v)p.SpeedMult=v end})
+        toggle("FSK"..role.."NoDrain","Disable stamina drain","NoDrain")
+        toggle("FSK"..role.."NoRecovery","Remove recovery delay","NoRecoveryDelay")
+    end
+    build("Survivor","AddRightGroupbox")
+    build("Killer","AddLeftGroupbox")
+    connection=RunService.Heartbeat:Connect(apply)
+    local function cleanup() if connection then connection:Disconnect() end;restore() end
+    if type(Library.OnUnload)=="function" then Library:OnUnload(cleanup) end
+    Environment.__ForsakenStaminaChanger={Profiles=profiles,Destroy=cleanup,Sprinting=Sprinting}
 end
-
 local addonPaths = {
     "FartHub/Addons/nosbloodhook.lua",
     "FartHub/Addons/fartfix.lua",
