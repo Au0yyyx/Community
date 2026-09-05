@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Abilities=Window:AddTab("Ability Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,AbilityPrediction=.12,AimFOV=160,Wall=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,AbilityAimbot=false,AbilityPrediction=.12,AimFOV=160,Wall=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 local AbilityDefs={
  Tails={{"Laser Canon",1,7,true},{"Glide",2,10,false}},
@@ -21,7 +21,7 @@ local AbilityDefs={
  Cream={{"Heal",1,1,false},{"Dash",2,1.15,false}},
  MetalSonic={{"Destructive Charge",1,4,false},{"Self Repair",2,7.5,false}},
  Sonic={{"Drop Dash",1,5,false},{"Peelout",2,6,false}},
- Blaze={{"Enhanced Sol Boost",1,1.2,false},{"Sol Flame",2,2.5,false},{"Burning Javelin",3,1.5,true}},
+ Blaze={{"RoundKick",1,.9,false},{"Burning Javelin",2,1.5,true}},
  Silver={{"Suspension",1,3,true},{"Psychokinesis / Rocks",2,2.5,true},{"Time Reversal",3,1,false}},
  ["2011x"]={{"Attack",0,.65,false},{"Invisibility",1,25,false},{"Charge",2,4.25,false},{"Rage Mode",4,3,false}},
  Kolossos={{"Attack",0,.7,false},{"Charge",1,5,false},{"Block",2,1.25,false},{"Grab",3,1.5,false},{"Indicator",4,6.5,false}},
@@ -29,7 +29,7 @@ local AbilityDefs={
  Fleetway={{"Attack",0,.65,false},{"Chaos Dash",1,4,false},{"Fateful Drain",2,2.25,true},{"Burst",3,1,false},{"Laser of Destruction",4,4,true}}
 }
 App.AbilityConfigs={};App.AbilityKeys={}
-for character,defs in pairs(AbilityDefs)do for _,d in ipairs(defs)do local key=character.."/"..d[1];App.AbilityKeys[#App.AbilityKeys+1]=key;App.AbilityConfigs[key]={Character=character,Name=d[1],Slot=d[2],Duration=d[3],Silent=d[4],Enabled=false}end end
+for character,defs in pairs(AbilityDefs)do for _,d in ipairs(defs)do local key=character.."/"..d[1];App.AbilityKeys[#App.AbilityKeys+1]=key;App.AbilityConfigs[key]={Character=character,Name=d[1],Slot=d[2],Duration=d[3],Silent=d[4],Enabled=true}end end
 table.sort(App.AbilityKeys)
 local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
@@ -50,10 +50,10 @@ end
 local function clear(m)local v=App.Items[m];if not v then return end;for _,x in pairs(v)do pcall(x.Destroy,x)end;App.Items[m]=nil end
 local function target()
  local cam=workspace.CurrentCamera;local pf=playersFolder();local mr=root(LP.Character);if not cam or not pf or not mr then return end
- local mouse=UIS:GetMouseLocation();local best,score
+ local best,score
  for _,m in ipairs(pf:GetChildren())do local r=root(m);local valid=m:GetAttribute("Team") and m:GetAttribute("Team")~=myTeam();if m~=LP.Character and r and alive(m) and valid then
-  local p,on=cam:WorldToViewportPoint(r.Position);local s=(Vector2.new(p.X,p.Y)-mouse).Magnitude
-  if on and s<=App.Settings.AimFOV and (not score or s<score) then
+  local s=(r.Position-mr.Position).Magnitude
+  if not score or s<score then
    local clear=true;if App.Settings.Wall then local rp=RaycastParams.new();rp.FilterType=Enum.RaycastFilterType.Exclude;rp.FilterDescendantsInstances={LP.Character,m};clear=workspace:Raycast(cam.CFrame.Position,r.Position-cam.CFrame.Position,rp)==nil end
    if clear then best,score=m,s end
   end
@@ -64,14 +64,16 @@ App.Connections[#App.Connections+1]=RunService.RenderStepped:Connect(function()
  local l=game:GetService("Lighting");if App.Settings.Fullbright then l.Brightness=3;l.GlobalShadows=false end;if App.Settings.NoFog then l.FogEnd=1e6 end
 end)
 local e=Tabs.ESP:AddLeftGroupbox("ESP");e:AddToggle("OMChams",{Text="Chams",Default=false,Callback=function(v)App.Settings.Chams=v end});e:AddToggle("OMCharacterESP",{Text="Character ESP (Sonic/Amy/etc.)",Default=true,Callback=function(v)App.Settings.CharacterESP=v end});e:AddToggle("OMNameESP",{Text="Player name ESP",Default=true,Callback=function(v)App.Settings.NameESP=v end});e:AddToggle("OMTextESP",{Text="State/life ESP",Default=true,Callback=function(v)App.Settings.TextESP=v end});e:AddToggle("OMHpESP",{Text="HP ESP",Default=false,Callback=function(v)App.Settings.HpESP=v end});e:AddToggle("OMHitboxes",{Text="Visual attack hitboxes",Default=false,Callback=function(v)App.Settings.Hitboxes=v end});e:AddSlider("OMHitRadius",{Text="Attack hitbox radius",Default=8,Min=1,Max=30,Rounding=2,Suffix=" studs",Callback=function(v)App.Settings.HitRadius=v end})
-local a=Tabs.Aim:AddLeftGroupbox("Targeting");a:AddSlider("OMFOV",{Text="Ability aim FOV",Default=160,Min=20,Max=500,Rounding=0,Callback=function(v)App.Settings.AimFOV=v end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end});a:AddSlider("OMAbilityPrediction",{Text="Prediction",Default=.12,Min=0,Max=1,Rounding=4,Suffix="s",Callback=function(v)App.Settings.AbilityPrediction=v end})
+local a=Tabs.Aim:AddLeftGroupbox("Targeting");a:AddToggle("OMAbilityAimbotMaster",{Text="Ability Aimbot",Default=false,Callback=function(v)App.Settings.AbilityAimbot=v;if not v then App.ActiveAbility=nil;App.ActiveAbilityUntil=0 end end});a:AddToggle("OMWall",{Text="Wall check",Default=true,Callback=function(v)App.Settings.Wall=v end});a:AddSlider("OMAbilityPrediction",{Text="Prediction",Default=.12,Min=0,Max=1,Rounding=4,Suffix="s",Callback=function(v)App.Settings.AbilityPrediction=v end});a:AddLabel("Targets the nearest opposing player when an enabled ability is used.",true)
+local function addAbilityControls(box,key,label)
+ local c=App.AbilityConfigs[key];local id=key:gsub("[^%w]","")
+ box:AddToggle("OMAbilityAim"..id,{Text=label,Default=true,Callback=function(v)c.Enabled=v end})
+ box:AddSlider("OMAbilityDuration"..id,{Text="Aim duration",Default=c.Duration,Min=.05,Max=30,Rounding=4,Suffix="s",Callback=function(v)c.Duration=v end})
+end
 local characterOrder={"Tails","Knuckles","Eggman","Amy","Cream","MetalSonic","Sonic","Blaze","Silver","2011x","Kolossos","TailsDoll","Fleetway"}
 for index,character in ipairs(characterOrder)do local defs=AbilityDefs[character];if defs then
  local box=(index%2==1 and Tabs.Abilities:AddLeftGroupbox(character) or Tabs.Abilities:AddRightGroupbox(character))
- for _,d in ipairs(defs)do local key=character.."/"..d[1];local c=App.AbilityConfigs[key];local id=key:gsub("[^%w]","")
-  box:AddToggle("OMAbilityAim"..id,{Text=d[1],Default=false,Callback=function(v)c.Enabled=v end})
-  box:AddSlider("OMAbilityDuration"..id,{Text="Aim duration",Default=c.Duration,Min=.05,Max=30,Rounding=4,Suffix="s",Callback=function(v)c.Duration=v end})
- end
+ for _,d in ipairs(defs)do addAbilityControls(box,character.."/"..d[1],d[1]) end
 end end
 local v=Tabs.Visuals:AddLeftGroupbox("Visuals");v:AddToggle("OMBright",{Text="Fullbright",Default=false,Callback=function(x)App.Settings.Fullbright=x end});v:AddToggle("OMFog",{Text="Remove fog",Default=false,Callback=function(x)App.Settings.NoFog=x end})
 
@@ -132,15 +134,35 @@ end)
 App.ActiveAbility=nil;App.ActiveAbilityUntil=0
 local keybinds={"E","Q","X","Z","F"}
 pcall(function()local d=game.ReplicatedStorage.Remotes.DataUpdate:InvokeServer("FetchData",{"setting"});if d and d.PCKeyBinds then for i=1,5 do keybinds[i]=d.PCKeyBinds[i] or keybinds[i] end end end)
+local function abilityBar()local r=LP.PlayerGui:FindFirstChild("Round");return r and r:FindFirstChild("Game") and r.Game:FindFirstChild("Ability") and r.Game.Ability:FindFirstChild("Bar")end
+local function displayedAbility(slot)
+ local bar=abilityBar();local button=bar and (bar:FindFirstChild("AB"..slot) or bar:FindFirstChild("AB"..(slot-1)));local label=button and button:FindFirstChild("ABName")
+ return label and label.Text,button
+end
 local function beginAbility(slot)
+ if not App.Settings.AbilityAimbot then return end
  local char=LP.Character;local character=char and tostring(char:GetAttribute("Character"));if not character then return end
  local defs=AbilityDefs[character];if not defs then return end
- for _,d in ipairs(defs)do if d[2]==slot then local c=App.AbilityConfigs[character.."/"..d[1]];if c and c.Enabled then App.ActiveAbility=c;App.ActiveAbilityUntil=os.clock()+c.Duration end;return end end
+ local shown=displayedAbility(slot);shown=shown and shown:lower():gsub("[^%w]","")
+ local fallback
+ for _,d in ipairs(defs)do local c=App.AbilityConfigs[character.."/"..d[1]];if d[2]==slot then fallback=c end;if shown and d[1]:lower():gsub("[^%w]","")==shown then fallback=c;break end end
+ if fallback and fallback.Enabled then App.ActiveAbility=fallback;App.ActiveAbilityUntil=os.clock()+fallback.Duration end
+end
+App.BeginAbility=beginAbility
+local function shownKey(slot)
+ local _,button=displayedAbility(slot);local n=button and button:FindFirstChild("Num");local s=n and n.Text or keybinds[slot]
+ local aliases={L1="ButtonL1",R1="ButtonR1",L2="ButtonL2",R2="ButtonR2",X="ButtonX",Y="ButtonY",A="ButtonA",B="ButtonB"}
+ return Enum.KeyCode[aliases[s] or s] or Enum.KeyCode[keybinds[slot]]
 end
 App.Connections[#App.Connections+1]=UIS.InputBegan:Connect(function(input,processed)
  if UIS:GetFocusedTextBox() then return end
  if input.UserInputType==Enum.UserInputType.MouseButton1 then beginAbility(0);return end
- for i=1,5 do if input.KeyCode==Enum.KeyCode[keybinds[i]] then beginAbility(i);return end end
+ for i=1,5 do if input.KeyCode==shownKey(i) or input.KeyCode==Enum.KeyCode[keybinds[i]] then beginAbility(i);return end end
+end)
+local boundButtons=setmetatable({},{__mode="k"})
+App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
+ local bar=abilityBar();if not bar then return end
+ for slot=1,5 do local s=slot;local _,button=displayedAbility(s);if button and button:IsA("GuiButton") and not boundButtons[button] then boundButtons[button]=true;App.Connections[#App.Connections+1]=button.Activated:Connect(function()beginAbility(s)end)end end
 end)
 local function activeAbility()
  if App.ActiveAbility and os.clock()<=App.ActiveAbilityUntil then return App.ActiveAbility end
