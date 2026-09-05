@@ -47,7 +47,8 @@ local Controller = {
         "__FartHubAzureAimFix",
         "__FartHubPlantFootprintESP",
         "__FartHubTwoTimeAutoBackstab",
-        "__ForsakenStaminaTrackerV2"
+        "__ForsakenStaminaTrackerV2",
+        "__ForsakenStaminaChanger"
     }
 }
 Environment[GUI_KEY] = Controller
@@ -974,6 +975,86 @@ print("[Forsaken Stamina Tracker V2] Loaded - role-aware")
     Library:OnUnload(unloadTracker)
 end
 
+local function setupStaminaChanger()
+    local Groupbox = Tabs.Automation:AddRightGroupbox("Local Stamina Changer")
+    local Sprinting = require(game:GetService("ReplicatedStorage").Systems.Character.Game.Sprinting)
+    local RunService = game:GetService("RunService")
+    local settings = {
+        Enabled = false,
+        MaxStamina = 100,
+        MinStamina = 0,
+        DrainMultiplier = 1,
+        RegenMultiplier = 1,
+        SprintSpeed = 26,
+        NoDrain = false,
+        InstantRecovery = false,
+    }
+    local original, connection
+
+    local function capture()
+        original = {
+            MaxStamina = Sprinting.MaxStamina,
+            MinStamina = Sprinting.MinStamina,
+            StaminaLoss = Sprinting.StaminaLoss,
+            StaminaGain = Sprinting.StaminaGain,
+            SprintSpeed = Sprinting.SprintSpeed,
+            StaminaLossDisabled = Sprinting.StaminaLossDisabled,
+        }
+    end
+    local function restore()
+        if not original then return end
+        for key, value in pairs(original) do Sprinting[key] = value end
+        if Sprinting.Stamina then
+            Sprinting.Stamina = math.clamp(Sprinting.Stamina, Sprinting.MinStamina, Sprinting.StaminaCap or Sprinting.MaxStamina)
+            if Sprinting.__staminaChangedEvent then Sprinting.__staminaChangedEvent:Fire(Sprinting.Stamina) end
+        end
+        pcall(Sprinting.Resync, Sprinting)
+    end
+    local function apply()
+        if not settings.Enabled or not Sprinting.DefaultsSet then return end
+        if not original then capture() end
+        Sprinting.MaxStamina = settings.MaxStamina
+        Sprinting.MinStamina = math.min(settings.MinStamina, settings.MaxStamina)
+        Sprinting.StaminaLoss = (original.StaminaLoss or 10) * settings.DrainMultiplier
+        Sprinting.StaminaGain = (original.StaminaGain or 20) * settings.RegenMultiplier
+        Sprinting.SprintSpeed = settings.SprintSpeed
+        Sprinting.StaminaLossDisabled = settings.NoDrain
+        if settings.InstantRecovery and not Sprinting.IsSprinting then
+            Sprinting.timeUntilStaminaRecovers = 0
+        end
+        if Sprinting.Stamina then
+            Sprinting.Stamina = math.clamp(Sprinting.Stamina, Sprinting.MinStamina, Sprinting.StaminaCap or Sprinting.MaxStamina)
+        end
+    end
+
+    Groupbox:AddToggle("ForsakenStaminaChanger", {Text="Enable stamina changer", Default=false, Callback=function(v)
+        if v and not settings.Enabled then capture() end
+        settings.Enabled=v
+        if v then apply() else restore();original=nil end
+    end})
+    Groupbox:AddSlider("ForsakenStaminaMax", {Text="Maximum stamina",Default=100,Min=1,Max=500,Rounding=0,Callback=function(v)settings.MaxStamina=v end})
+    Groupbox:AddSlider("ForsakenStaminaMin", {Text="Minimum stamina",Default=0,Min=0,Max=100,Rounding=0,Callback=function(v)settings.MinStamina=v end})
+    Groupbox:AddSlider("ForsakenStaminaDrain", {Text="Drain multiplier",Default=1,Min=0,Max=3,Rounding=2,Callback=function(v)settings.DrainMultiplier=v end})
+    Groupbox:AddSlider("ForsakenStaminaRegen", {Text="Regen multiplier",Default=1,Min=0,Max=5,Rounding=2,Callback=function(v)settings.RegenMultiplier=v end})
+    Groupbox:AddSlider("ForsakenSprintSpeed", {Text="Sprint speed",Default=26,Min=16,Max=40,Rounding=1,Callback=function(v)settings.SprintSpeed=v end})
+    Groupbox:AddToggle("ForsakenStaminaNoDrain", {Text="Disable stamina drain",Default=false,Callback=function(v)settings.NoDrain=v end})
+    Groupbox:AddToggle("ForsakenStaminaInstantRecovery", {Text="Remove recovery delay",Default=false,Callback=function(v)settings.InstantRecovery=v end})
+    Groupbox:AddLabel("Changes only your local Sprinting controller and restores every original value when disabled.", true)
+
+    connection=RunService.Heartbeat:Connect(function()
+        if settings.Enabled then
+            if Sprinting.DefaultsSet and original and Sprinting.MaxStamina ~= settings.MaxStamina then
+                -- Init or an ability rewrote the controller. Refresh its genuine defaults.
+                capture()
+            end
+            apply()
+        end
+    end)
+    local function cleanup() settings.Enabled=false;restore();if connection then connection:Disconnect()end end
+    if type(Library.OnUnload)=="function"then Library:OnUnload(cleanup)end
+    Environment.__ForsakenStaminaChanger={Settings=settings,Destroy=cleanup,Sprinting=Sprinting}
+end
+
 local addonPaths = {
     "FartHub/Addons/fartfix.lua",
     "FartHub/Addons/nosbloodhook.lua",
@@ -1030,6 +1111,12 @@ loadResults[#loadResults + 1] = {
     Name = "Role-aware stamina tracker (integrated)",
     Ok = staminaOk,
     Error = staminaError
+}
+local staminaChangerOk, staminaChangerError = pcall(setupStaminaChanger)
+loadResults[#loadResults + 1] = {
+    Name = "Local stamina changer (integrated)",
+    Ok = staminaChangerOk,
+    Error = staminaChangerError
 }
 Environment.Library = originalLibrary
 
