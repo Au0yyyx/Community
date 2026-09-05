@@ -10,6 +10,18 @@ if type(getrenv) == "function" and getrenv().game then
 end
 local GUI_KEY = "__ForsakenObsidianSuite"
 
+local function httpGet(url)
+    local requestFunction = request or http_request
+        or (syn and syn.request) or (http and http.request)
+    if type(requestFunction) == "function" then
+        local response = requestFunction({ Url = url, Method = "GET" })
+        assert(response and (response.Success ~= false)
+            and tonumber(response.StatusCode or 200) < 400, "HTTP request failed")
+        return response.Body
+    end
+    return game:HttpGet(url)
+end
+
 local legacy = Environment.__ForsakenAllInOneGui
 if type(legacy) == "table" and type(legacy.Destroy) == "function" then
     pcall(legacy.Destroy, legacy)
@@ -22,7 +34,7 @@ if type(previous) == "table" and type(previous.Destroy) == "function" then
 end
 
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local Library = loadstring(httpGet(repo .. "Library.lua"))()
 local Window = Library:CreateWindow({
     Title = "Forsaken Suite",
     Footer = "Obsidian | RightShift to toggle",
@@ -1078,7 +1090,7 @@ for _, path in ipairs(addonPaths) do
         addonUrl = "https://cdn.jsdelivr.net/gh/Au0yyyx/Community@bd0fb176854b931a92a9e14e789c694c367b0674/farthubsilentaim.lua"
     end
     local ok, source = pcall(function()
-        return game:HttpGet(addonUrl)
+        return httpGet(addonUrl)
     end)
     addonSources[fileName] = ok and source or nil
 end
@@ -1142,7 +1154,7 @@ end)
 
 local saveManager
 local saveOk, saveError = pcall(function()
-    saveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+    saveManager = loadstring(httpGet(repo .. "addons/SaveManager.lua"))()
     saveManager:SetLibrary(Library)
     saveManager:IgnoreThemeSettings()
     saveManager:SetFolder("ForsakenObsidianSuite")
