@@ -11,7 +11,7 @@ local Library=loadstring(get("https://raw.githubusercontent.com/deividcomsono/Ob
 local Window=Library:CreateWindow({Title="Outcome Memories Suite",Footer="RightShift to toggle",Center=true,AutoShow=true,ToggleKeybind=Enum.KeyCode.RightShift})
 local Tabs={ESP=Window:AddTab("ESP"),Aim=Window:AddTab("Aim"),Visuals=Window:AddTab("Visuals"),Settings=Window:AddTab("Settings")}
 Library.Toggles=Library.Toggles or {};Library.Options=Library.Options or {}
-local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,Aim=false,AimHold=true,SilentAim=false,TailsCannonSilentAim=false,AbilityAim=false,AbilitySilent=true,AbilityPrediction=.12,AimSurvivors=false,AimEXE=true,AimFOV=160,AimSmooth=0.18,Wall=true,FOVCircle=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
+local App={Connections={},Items={},WorldItems={},HPMax=setmetatable({},{__mode="k"}),Settings={Chams=false,CharacterESP=true,NameESP=true,TextESP=true,HpESP=false,Hitboxes=false,HitRadius=8,MineESP=false,EscapeESP=false,AbilityPrediction=.12,AimFOV=160,Wall=true,AutoBlock=false,BlockRange=14,BlockDelay=.06,BlockHold=.18,BlockKey="F",Auto2011QTE=false,QTEDelay=.08,SpeedMultiplierEnabled=false,SpeedMultiplier=1,ThreatAlerts=false,ThreatRange=45,RoundInfo=false,CooldownInfo=false,SpeedInfo=false,Fullbright=false,NoFog=false,LowEffects=false}}
 env.__OutcomeMemoriesSuite=App
 -- Only moves which actually consume mouse/camera aim.
 local AbilityDefs={
@@ -29,12 +29,6 @@ local function playersFolder() return workspace:FindFirstChild("Players") end
 local function root(m)return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)end
 local function alive(m)return root(m) and (not m:GetAttribute("State") or m:GetAttribute("State")~="dead")end
 local function myTeam()local c=LP.Character;return c and c:GetAttribute("Team")end
-local function wanted(m)
- local team=m:GetAttribute("Team");if not team then return false end
- if team=="Survivor" then return App.Settings.AimSurvivors end
- if team=="EXE" then return App.Settings.AimEXE end
- return false
-end
 local function attackActive(m)
     local ok, tagged = pcall(m.HasTag, m, "Hit")
     return (ok and tagged) or m:GetAttribute("Hit") == true
@@ -48,10 +42,10 @@ local function item(m)
  v={H=h,B=b,T=t,R=ring};App.Items[m]=v;return v
 end
 local function clear(m)local v=App.Items[m];if not v then return end;for _,x in pairs(v)do pcall(x.Destroy,x)end;App.Items[m]=nil end
-local function target(autoEnemy)
+local function target()
  local cam=workspace.CurrentCamera;local pf=playersFolder();local mr=root(LP.Character);if not cam or not pf or not mr then return end
  local mouse=UIS:GetMouseLocation();local best,score
- for _,m in ipairs(pf:GetChildren())do local r=root(m);local valid=autoEnemy and m:GetAttribute("Team")~=myTeam() or wanted(m);if m~=LP.Character and r and alive(m) and valid then
+ for _,m in ipairs(pf:GetChildren())do local r=root(m);local valid=m:GetAttribute("Team") and m:GetAttribute("Team")~=myTeam();if m~=LP.Character and r and alive(m) and valid then
   local p,on=cam:WorldToViewportPoint(r.Position);local s=(Vector2.new(p.X,p.Y)-mouse).Magnitude
   if on and s<=App.Settings.AimFOV and (not score or s<score) then
    local clear=true;if App.Settings.Wall then local rp=RaycastParams.new();rp.FilterType=Enum.RaycastFilterType.Exclude;rp.FilterDescendantsInstances={LP.Character,m};clear=workspace:Raycast(cam.CFrame.Position,r.Position-cam.CFrame.Position,rp)==nil end
@@ -101,8 +95,6 @@ App.Connections[#App.Connections+1]=CollectionService:GetInstanceAddedSignal("Tr
  task.defer(function()local q=worldItem(x);if q then q.H.Enabled=App.Settings.MineESP;q.B.Enabled=App.Settings.MineESP end end)
 end)
 
-local fov=nil
-
 local info=Tabs.Visuals:AddRightGroupbox("Live Information")
 local roundLabel=info:AddLabel("Round: disabled",true)
 local threatLabel=info:AddLabel("Threat: disabled",true)
@@ -147,7 +139,7 @@ local function activeAbility()
  App.ActiveAbility=nil
 end
 local function aimPoint()
- local m=target(true);local tr=root(m);return tr and (tr.Position+tr.AssemblyLinearVelocity*App.Settings.AbilityPrediction),m
+ local m=target();local tr=root(m);return tr and (tr.Position+tr.AssemblyLinearVelocity*App.Settings.AbilityPrediction),m
 end
 local function rewriteAimArgs(args,predicted)
  local changed=false
@@ -259,7 +251,6 @@ App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()if no
 local lastInfo=0
 App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
  if os.clock()-lastInfo<.15 then return end;lastInfo=os.clock()
- if fov then fov.Visible=App.Settings.Aim and App.Settings.FOVCircle;fov.Position=UIS:GetMouseLocation();fov.Radius=App.Settings.AimFOV end
  local gp=workspace:FindFirstChild("GameProperties")
  if App.Settings.RoundInfo and gp then local state=gp:FindFirstChild("State");local time=gp:FindFirstChild("Time");local exe=gp:FindFirstChild("EXE");roundLabel:SetText(string.format("%s | %ss | EXE: %s",state and state.Value or "?",time and time.Value or "?",exe and exe.Value or "?"))else roundLabel:SetText("Round: disabled")end
  local me=root(LP.Character);local nearest=math.huge;local nearestName="none";local pf=playersFolder();if me and pf then for _,m in ipairs(pf:GetChildren())do if m:GetAttribute("Team")=="EXE" and m~=LP.Character and root(m) then local d=(root(m).Position-me.Position).Magnitude;if d<nearest then nearest=d;nearestName=m.Name end end end end
@@ -268,5 +259,5 @@ App.Connections[#App.Connections+1]=RunService.Heartbeat:Connect(function()
  if App.Settings.CooldownInfo and LP.Character then local values={};for _,x in ipairs(LP.Character:GetChildren())do if x:IsA("NumberValue") and (x.Name:lower():find("cool",1,true) or x.Name:lower():find("charge",1,true) or x.Name:lower():find("mine",1,true) or x.Name:lower():find("energy",1,true)) then values[#values+1]=x.Name..": "..string.format("%.1f",x.Value) end end;cooldownLabel:SetText(#values>0 and table.concat(values," | ") or "Cooldowns: no exposed values")else cooldownLabel:SetText("Cooldowns: disabled")end
 end)
 
-function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;for _,q in pairs(self.WorldItems)do pcall(q.H.Destroy,q.H);pcall(q.B.Destroy,q.B)end;if fov then pcall(fov.Remove,fov)end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
+function App:Destroy()for _,c in ipairs(self.Connections)do pcall(c.Disconnect,c)end;for m in pairs(self.Items)do clear(m)end;for _,q in pairs(self.WorldItems)do pcall(q.H.Destroy,q.H);pcall(q.B.Destroy,q.B)end;if mouse2Remote and mouse2Remote.Parent and mouse2Remote.OnClientInvoke==mouse2Wrapped then mouse2Remote.OnClientInvoke=mouse2Old end;if env.__OutcomeMemoriesSuite==self then env.__OutcomeMemoriesSuite=nil end;Library:Unload()end
 
