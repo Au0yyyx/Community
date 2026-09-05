@@ -3,6 +3,11 @@ if not game:IsLoaded() then
 end
 
 local Environment = getgenv and getgenv() or _G
+-- Fartsaken can leave the executor environment's `game` pointing at its Ugc
+-- DataModel after a config load. Restore the actual client DataModel first.
+if type(getrenv) == "function" and getrenv().game then
+    Environment.game = getrenv().game
+end
 local GUI_KEY = "__ForsakenObsidianSuite"
 
 local legacy = Environment.__ForsakenAllInOneGui
