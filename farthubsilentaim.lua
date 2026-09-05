@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local Environment = getgenv and getgenv() or _G
@@ -65,7 +66,9 @@ local Controller = {
         ShowFOV = true,
         FOVRadius = 150,
         WallCheck = true,
-        HighNovaHeight = 5
+        HighNovaHeight = 5,
+        AutoDetonate = false,
+        AutoDetonateRadius = 17.25
     }
 }
 Environment[ADDON_KEY] = Controller
@@ -225,6 +228,52 @@ Controller.ReplacementGetMousePos = replacementGetMousePos
 -- The current Util export is readonly. MouseProvider is the writable public provider
 -- used by ability code, so avoid mutating Util and keep the addon compatible.
 local Util = nil
+
+local voidstars = setmetatable({}, { __mode = "k" })
+local function trackVoidstar(instance)
+    if instance.Name == "Voidstar" and instance:IsA("BasePart") then
+        voidstars[instance] = true
+    end
+end
+for _, instance in ipairs(workspace:GetDescendants()) do trackVoidstar(instance) end
+table.insert(Controller.Connections, workspace.DescendantAdded:Connect(trackVoidstar))
+table.insert(Controller.Connections, workspace.DescendantRemoving:Connect(function(instance)
+    voidstars[instance] = nil
+end))
+
+local lastDetonate = 0
+local function pressNovaKey()
+    if type(keypress) == "function" and type(keyrelease) == "function" then
+        keypress(0x45)
+        task.delay(0.035, function() pcall(keyrelease, 0x45) end)
+    else
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.delay(0.035, function()
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        end)
+    end
+end
+
+table.insert(Controller.Connections, RunService.Heartbeat:Connect(function()
+    if Controller.Destroyed or not Controller.Settings.Enabled
+        or not Controller.Settings.AutoDetonate or os.clock() - lastDetonate < 0.35 then return end
+    local actor = getActor()
+    if not actor or actor.ActorName ~= "Noli" then return end
+    local target, targetPosition = findTarget(actor, actor.Config and actor.Config.NovaProjectileSpeed or 80)
+    if not target or not targetPosition then return end
+    local radius = Controller.Settings.AutoDetonateRadius
+    for star in pairs(voidstars) do
+        if not star.Parent then
+            voidstars[star] = nil
+        elseif not star:IsDescendantOf(actor.Rig)
+            and (star.Position - targetPosition).Magnitude <= radius then
+            lastDetonate = os.clock()
+            pressNovaKey()
+            break
+        end
+    end
+end))
+
 local fovCircle
 if type(Drawing) == "table" and type(Drawing.new) == "function" then
     local succeeded, circle = pcall(Drawing.new, "Circle")
@@ -357,6 +406,24 @@ local wallCheckToggle = MainGroup:AddToggle("FartHubStandaloneSilentAimWallCheck
     end
 })
 table.insert(Controller.Controls, wallCheckToggle)
+
+local autoDetonateToggle = MainGroup:AddToggle("FartHubStandaloneAutoDetonate", {
+    Text = "Auto Detonate Nova",
+    Default = Controller.Settings.AutoDetonate,
+    Callback = function(value) Controller.Settings.AutoDetonate = value end
+})
+table.insert(Controller.Controls, autoDetonateToggle)
+
+local detonateRadiusSlider = MainGroup:AddSlider("FartHubStandaloneAutoDetonateRadius", {
+    Text = "Nova Detonate Range",
+    Default = Controller.Settings.AutoDetonateRadius,
+    Min = 5,
+    Max = 26,
+    Rounding = 2,
+    Suffix = " studs",
+    Callback = function(value) Controller.Settings.AutoDetonateRadius = value end
+})
+table.insert(Controller.Controls, detonateRadiusSlider)
 
 MainGroup:AddLabel(
     "High Nova aims the selected height above the model's exact top.",
